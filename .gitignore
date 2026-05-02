@@ -1,0 +1,5 @@
+/.env
+/vendor/
+/storage/database.sqlite
+/files/signed/*
+!/files/signed/.gitkeep

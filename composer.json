@@ -1,0 +1,11 @@
+{
+    "name": "case/portal-assinaturas",
+    "description": "Case em PHP puro para integracao com o Portal de Assinaturas",
+    "type": "project",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}
