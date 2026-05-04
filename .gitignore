@@ -1,5 +1,6 @@
 /.env
 /vendor/
-/storage/database.sqlite
+/storage/*.sqlite
+/storage/*.sqlite-*
 /files/signed/*
 !/files/signed/.gitkeep
