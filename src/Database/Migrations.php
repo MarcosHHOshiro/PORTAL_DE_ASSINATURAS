@@ -41,6 +41,8 @@ final class Migrations
             )"
         );
 
+        self::addColumnIfMissing('documents', 'signers_json', 'TEXT');
+
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS api_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,5 +56,19 @@ final class Migrations
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )"
         );
+    }
+
+    private static function addColumnIfMissing(string $table, string $column, string $definition): void
+    {
+        $pdo = Connection::getInstance();
+        $columns = $pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll();
+
+        foreach ($columns as $existingColumn) {
+            if (($existingColumn['name'] ?? '') === $column) {
+                return;
+            }
+        }
+
+        $pdo->exec('ALTER TABLE ' . $table . ' ADD COLUMN ' . $column . ' ' . $definition);
     }
 }

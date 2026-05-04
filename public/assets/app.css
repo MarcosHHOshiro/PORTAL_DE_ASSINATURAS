@@ -259,6 +259,41 @@ label {
     line-height: 1.45;
 }
 
+.signers-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.signers-list {
+    display: grid;
+    gap: 12px;
+}
+
+.signer-card {
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    background: #fbfcfd;
+}
+
+.signer-card legend {
+    padding: 0 8px;
+    color: var(--accent-dark);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.signer-grid {
+    grid-template-columns: minmax(140px, 1fr) minmax(180px, 1fr) minmax(120px, 0.8fr) auto;
+}
+
+.signer-remove-field {
+    justify-content: flex-end;
+}
+
 input[type="text"],
 input[type="email"],
 input[type="password"],
@@ -454,6 +489,65 @@ button:disabled,
     display: grid;
     gap: 6px;
     min-width: 0;
+}
+
+.signer-list {
+    display: grid;
+    gap: 6px;
+}
+
+.signer-list span {
+    display: grid;
+    gap: 2px;
+}
+
+.signer-list small {
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+}
+
+.signer-name-line {
+    display: flex !important;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mini-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 3px 7px;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.signer-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    min-height: 34px;
+    border: 1px solid rgba(15, 118, 110, 0.34);
+    border-radius: 9px;
+    padding: 0 12px;
+    background: #fff;
+    color: var(--accent-dark);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1;
+    text-decoration: none;
+    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.08);
+    transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.signer-link:hover {
+    background: var(--accent-soft);
+    box-shadow: 0 10px 22px rgba(15, 118, 110, 0.14);
+    transform: translateY(-1px);
 }
 
 .document-title {
@@ -713,6 +807,14 @@ button:disabled,
         align-items: stretch;
         flex-direction: column;
     }
+
+    .signer-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .signer-remove-field {
+        justify-content: flex-start;
+    }
 }
 
 @media (max-width: 640px) {
@@ -722,6 +824,10 @@ button:disabled,
 
     .form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .signers-heading {
+        flex-direction: column;
     }
 
     .button-link {

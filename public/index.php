@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             $validation = $documentService->validateSignatures((string) ($document['document_key'] ?? ''));
-            $documentRepository->updateValidation($documentId, (bool) $validation['isValid'], $validation);
+            $documentRepository->updateValidation($documentId, (bool) $validation['isValid'], $validation, document_signers($document));
             Response::flash('success', 'Validacao concluida com sucesso.');
         } catch (Throwable $exception) {
             $documentRepository->updateStatus($documentId, 'ERROR');
@@ -133,6 +133,7 @@ render_app_header($currentUser, 'documentos');
             <?php $hasDocumentKey = trim((string) ($document['document_key'] ?? '')) !== ''; ?>
             <?php $signerCpfDigits = preg_replace('/\D+/', '', (string) ($document['signer_cpf'] ?? '')) ?: ''; ?>
             <?php $accessCode = $signerCpfDigits !== '' ? substr(str_pad($signerCpfDigits, 6, '0', STR_PAD_LEFT), -6) : ''; ?>
+            <?php $documentSigners = document_signers($document); ?>
             <article class="document-card">
                 <div class="document-main">
                     <strong class="document-title"><?= Response::escape($document['document_name']) ?></strong>
@@ -147,9 +148,37 @@ render_app_header($currentUser, 'documentos');
                 </div>
 
                 <div class="signer-block">
-                    <strong><?= Response::escape($document['signer_name']) ?></strong>
-                    <span><?= Response::escape($document['signer_email']) ?></span>
-                    <?php if ($accessCode !== ''): ?>
+                    <strong><?= Response::escape(count($documentSigners) > 1 ? count($documentSigners) . ' assinantes' : ($documentSigners[0]['name'] ?? $document['signer_name'])) ?></strong>
+                    <div class="signer-list">
+                        <?php foreach ($documentSigners as $signer): ?>
+                            <?php $signerCpf = preg_replace('/\D+/', '', (string) ($signer['cpf'] ?? '')) ?: ''; ?>
+                            <?php $signerAccessCode = $signerCpf !== '' ? substr(str_pad($signerCpf, 6, '0', STR_PAD_LEFT), -6) : ''; ?>
+                            <?php $signerStatus = (string) ($signer['status'] ?? 'PENDING_SIGNATURE'); ?>
+                            <span>
+                                <span class="signer-name-line">
+                                    <?= Response::escape((string) ($signer['name'] ?? 'Assinante')) ?>
+                                    <span
+                                        class="mini-badge <?= Response::escape(status_badge_class($signerStatus)) ?>"
+                                        title="Status tecnico do assinante: <?= Response::escape($signerStatus) ?>"
+                                    ><?= Response::escape(status_label($signerStatus)) ?></span>
+                                </span>
+                                <small><?= Response::escape((string) ($signer['email'] ?? '')) ?></small>
+                            </span>
+                            <?php if ($signerAccessCode !== ''): ?>
+                                <span class="access-code">Acesso: <?= Response::escape($signerAccessCode) ?></span>
+                            <?php endif; ?>
+                            <?php if (!empty($signer['sign_url'])): ?>
+                                <a
+                                    class="signer-link"
+                                    href="<?= Response::escape((string) $signer['sign_url']) ?>"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >Assinar como <?= Response::escape((string) ($signer['name'] ?? 'assinante')) ?></a>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php if ($documentSigners === [] && $accessCode !== ''): ?>
+                        <span><?= Response::escape($document['signer_email']) ?></span>
                         <span class="access-code">Acesso: <?= Response::escape($accessCode) ?></span>
                     <?php endif; ?>
                 </div>
@@ -189,16 +218,6 @@ render_app_header($currentUser, 'documentos');
                         >Baixar</button>
                     </form>
 
-                    <?php if (!empty($document['sign_url'])): ?>
-                        <a
-                            class="action-button open-button"
-                            href="<?= Response::escape((string) $document['sign_url']) ?>"
-                            target="_blank"
-                            rel="noreferrer"
-                            title="Abrir tela de assinatura do Portal em uma nova aba."
-                        >Abrir</a>
-                    <?php endif; ?>
-
                     <?php if ($documentStatus !== 'SIGNED'): ?>
                         <form method="post" onsubmit="return confirm('Deseja excluir este documento?');">
                             <input type="hidden" name="action" value="delete_document">
@@ -215,4 +234,27 @@ render_app_header($currentUser, 'documentos');
         <?php endforeach; ?>
     </div>
 </section>
-<?php render_page_end(); ?>
+<?php
+function document_signers(array $document): array
+{
+    $signersJson = $document['signers_json'] ?? null;
+
+    if (is_string($signersJson) && trim($signersJson) !== '') {
+        $decoded = json_decode($signersJson, true);
+
+        if (is_array($decoded) && $decoded !== []) {
+            return array_values(array_filter($decoded, 'is_array'));
+        }
+    }
+
+    return [
+        [
+            'name' => (string) ($document['signer_name'] ?? 'Assinante'),
+            'email' => (string) ($document['signer_email'] ?? ''),
+            'cpf' => (string) ($document['signer_cpf'] ?? ''),
+        ],
+    ];
+}
+
+render_page_end();
+?>

@@ -43,23 +43,33 @@ final class DocumentService
         ?string $signerCpf = null,
         ?string $uploadedFileName = null
     ): array {
+        return $this->createBatchWithSigners($uploadId, $documentName, [
+            [
+                'name' => $signerName,
+                'email' => $signerEmail,
+                'cpf' => $signerCpf,
+            ],
+        ], $uploadedFileName);
+    }
+
+    public function createBatchWithSigners(
+        string $uploadId,
+        string $documentName,
+        array $signers,
+        ?string $uploadedFileName = null
+    ): array {
         $documentName = trim($documentName);
-        $signerName = trim($signerName);
-        $signerEmail = strtolower(trim($signerEmail));
-        $signerCpf = $this->sanitizeCpf($signerCpf);
+        $normalizedSigners = $this->normalizeSigners($signers);
         $uploadedFileName = $this->ensurePdfFileName($uploadedFileName ?: $documentName);
 
-        if ($documentName === '' || $signerName === '' || !filter_var($signerEmail, FILTER_VALIDATE_EMAIL)) {
+        if ($documentName === '') {
             throw new RuntimeException('Dados do documento ou do assinante invalidos para criar o lote.');
         }
 
-        if ($signerCpf === null) {
-            throw new RuntimeException('O CPF do assinante e obrigatorio para o fluxo de assinatura eletronica deste MVP.');
-        }
-
-        $documentPayload = $this->buildDocumentPayload($uploadId, $documentName, $uploadedFileName, $signerName, $signerEmail, $signerCpf);
+        $documentPayload = $this->buildDocumentPayload($uploadId, $documentName, $uploadedFileName, $normalizedSigners);
         $response = $this->createDocumentThroughSupportedEndpoint($documentPayload);
         $normalized = $this->normalizeCreateBatchResponse($response);
+        $normalized['signers'] = $this->mergeSignerLinks($normalizedSigners, $response);
 
         if (
             $normalized['portal_document_id'] === null
@@ -178,9 +188,7 @@ final class DocumentService
         string $uploadId,
         string $documentName,
         string $uploadedFileName,
-        string $signerName,
-        string $signerEmail,
-        string $signerCpf
+        array $signers
     ): array {
         return [
             'document' => [
@@ -190,20 +198,106 @@ final class DocumentService
                     'name' => $uploadedFileName,
                 ],
             ],
-            'electronicSigners' => [
-                [
+            'electronicSigners' => array_map(
+                fn (array $signer, int $index): array => [
                     'step' => 1,
-                    'title' => 'Assinante',
-                    'name' => $signerName,
-                    'email' => $signerEmail,
-                    'individualIdentificationCode' => $signerCpf,
+                    'title' => 'Assinante ' . ($index + 1),
+                    'name' => $signer['name'],
+                    'email' => $signer['email'],
+                    'individualIdentificationCode' => $signer['cpf'],
                     'identificationType' => [
                         'accessCode' => true,
                     ],
-                    'accessCode' => $this->buildAccessCode($signerCpf),
+                    'accessCode' => $this->buildAccessCode($signer['cpf']),
                 ],
-            ],
+                $signers,
+                array_keys($signers)
+            ),
         ];
+    }
+
+    private function mergeSignerLinks(array $signers, array $response): array
+    {
+        $attendees = $this->extractAttendees($response);
+
+        foreach ($signers as $index => $signer) {
+            foreach ($attendees as $attendee) {
+                if (!is_array($attendee)) {
+                    continue;
+                }
+
+                $attendeeEmail = strtolower(trim((string) ($attendee['email'] ?? $attendee['mail'] ?? '')));
+                $attendeeCpf = $this->sanitizeCpf((string) ($attendee['individualIdentificationCode'] ?? $attendee['cpf'] ?? ''));
+                $matchesEmail = $attendeeEmail !== '' && $attendeeEmail === $signer['email'];
+                $matchesCpf = $attendeeCpf !== null && $attendeeCpf === $signer['cpf'];
+
+                if (!$matchesEmail && !$matchesCpf) {
+                    continue;
+                }
+
+                $signers[$index]['sign_url'] = $attendee['signUrl']
+                    ?? $attendee['link']
+                    ?? $attendee['linkFrame']
+                    ?? null;
+                break;
+            }
+        }
+
+        return $signers;
+    }
+
+    private function extractAttendees(array $response): array
+    {
+        $document = $response['documents'][0] ?? $response['document'] ?? [];
+        $attendees = [];
+
+        foreach ([$response['attendees'] ?? null, $document['attendees'] ?? null] as $candidate) {
+            if (is_array($candidate)) {
+                $attendees = array_merge($attendees, $candidate);
+            }
+        }
+
+        if (isset($response['steps']) && is_array($response['steps'])) {
+            foreach ($response['steps'] as $step) {
+                if (isset($step['attendees']) && is_array($step['attendees'])) {
+                    $attendees = array_merge($attendees, $step['attendees']);
+                }
+            }
+        }
+
+        return $attendees;
+    }
+
+    private function normalizeSigners(array $signers): array
+    {
+        $normalized = [];
+
+        foreach ($signers as $signer) {
+            if (!is_array($signer)) {
+                continue;
+            }
+
+            $name = trim((string) ($signer['name'] ?? ''));
+            $email = strtolower(trim((string) ($signer['email'] ?? '')));
+            $cpf = $this->sanitizeCpf(isset($signer['cpf']) ? (string) $signer['cpf'] : null);
+
+            if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || $cpf === null) {
+                throw new RuntimeException('Todos os assinantes precisam ter nome, e-mail valido e CPF.');
+            }
+
+            $normalized[] = [
+                'name' => $name,
+                'email' => $email,
+                'cpf' => $cpf,
+                'access_code' => $this->buildAccessCode($cpf),
+            ];
+        }
+
+        if ($normalized === []) {
+            throw new RuntimeException('Adicione pelo menos um assinante ao documento.');
+        }
+
+        return $normalized;
     }
 
     private function createDocumentThroughSupportedEndpoint(array $documentPayload): array

@@ -33,17 +33,19 @@ $documentService = new DocumentService(new ApiClient($apiLogRepository), $curren
 $uploadErrors = [];
 $formData = [
     'document_name' => '',
-    'signer_name' => '',
-    'signer_email' => '',
-    'signer_cpf' => '',
+    'signers' => [
+        [
+            'name' => '',
+            'email' => '',
+            'cpf' => '',
+        ],
+    ],
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formData = [
         'document_name' => trim((string) ($_POST['document_name'] ?? '')),
-        'signer_name' => trim((string) ($_POST['signer_name'] ?? '')),
-        'signer_email' => trim((string) ($_POST['signer_email'] ?? '')),
-        'signer_cpf' => trim((string) ($_POST['signer_cpf'] ?? '')),
+        'signers' => normalize_posted_signers($_POST['signers'] ?? []),
     ];
 
     if (!isset($_FILES['pdf']) || (int) ($_FILES['pdf']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -54,25 +56,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $uploadErrors[] = 'Informe o nome do documento.';
     }
 
-    if ($formData['signer_name'] === '') {
-        $uploadErrors[] = 'Informe o nome do assinante.';
-    }
+    foreach ($formData['signers'] as $index => $signer) {
+        $signerNumber = $index + 1;
 
-    if (!filter_var($formData['signer_email'], FILTER_VALIDATE_EMAIL)) {
-        $uploadErrors[] = 'Informe um e-mail valido para o assinante.';
-    }
+        if ($signer['name'] === '') {
+            $uploadErrors[] = 'Informe o nome do assinante ' . $signerNumber . '.';
+        }
 
-    if (preg_replace('/\D+/', '', $formData['signer_cpf']) === '') {
-        $uploadErrors[] = 'Informe o CPF do assinante.';
+        if (!filter_var($signer['email'], FILTER_VALIDATE_EMAIL)) {
+            $uploadErrors[] = 'Informe um e-mail valido para o assinante ' . $signerNumber . '.';
+        }
+
+        if (preg_replace('/\D+/', '', $signer['cpf']) === '') {
+            $uploadErrors[] = 'Informe o CPF do assinante ' . $signerNumber . '.';
+        }
     }
 
     if ($uploadErrors === []) {
+        $primarySigner = $formData['signers'][0];
+
         $localDocumentId = $documentRepository->create([
             'user_id' => $currentUserId,
             'document_name' => $formData['document_name'],
-            'signer_name' => $formData['signer_name'],
-            'signer_email' => $formData['signer_email'],
-            'signer_cpf' => $formData['signer_cpf'],
+            'signer_name' => build_signer_summary($formData['signers']),
+            'signer_email' => $primarySigner['email'],
+            'signer_cpf' => $primarySigner['cpf'],
+            'signers' => $formData['signers'],
             'status' => 'CREATED',
         ]);
 
@@ -83,12 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $uploadResponse = $documentService->uploadPdf($uploadedFilePath, $uploadedFileName);
             $documentRepository->updateAfterUpload($localDocumentId, $uploadResponse['uploadId']);
 
-            $createBatchResponse = $documentService->createBatch(
+            $createBatchResponse = $documentService->createBatchWithSigners(
                 $uploadResponse['uploadId'],
                 $formData['document_name'],
-                $formData['signer_name'],
-                $formData['signer_email'],
-                $formData['signer_cpf'],
+                $formData['signers'],
                 $uploadedFileName
             );
 
@@ -96,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'portal_document_id' => $createBatchResponse['portal_document_id'],
                 'document_key' => $createBatchResponse['document_key'],
                 'sign_url' => $createBatchResponse['sign_url'],
+                'signers' => $createBatchResponse['signers'] ?? $formData['signers'],
                 'status' => 'SENT_TO_SIGNATURE',
             ]);
 
@@ -106,6 +114,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $uploadErrors[] = $exception->getMessage();
         }
     }
+}
+
+function normalize_posted_signers(mixed $rawSigners): array
+{
+    if (!is_array($rawSigners)) {
+        return [['name' => '', 'email' => '', 'cpf' => '']];
+    }
+
+    $signers = [];
+
+    foreach ($rawSigners as $rawSigner) {
+        if (!is_array($rawSigner)) {
+            continue;
+        }
+
+        $signers[] = [
+            'name' => trim((string) ($rawSigner['name'] ?? '')),
+            'email' => trim((string) ($rawSigner['email'] ?? '')),
+            'cpf' => trim((string) ($rawSigner['cpf'] ?? '')),
+        ];
+    }
+
+    return $signers === [] ? [['name' => '', 'email' => '', 'cpf' => '']] : $signers;
+}
+
+function build_signer_summary(array $signers): string
+{
+    $firstSignerName = (string) ($signers[0]['name'] ?? 'Assinante');
+    $remainingSigners = max(count($signers) - 1, 0);
+
+    if ($remainingSigners === 0) {
+        return $firstSignerName;
+    }
+
+    return $firstSignerName . ' +' . $remainingSigners;
 }
 
 render_page_start('Novo Envio');
@@ -146,20 +189,42 @@ render_app_header($currentUser, 'novo-envio');
                     <input id="document_name" name="document_name" type="text" value="<?= Response::escape($formData['document_name']) ?>" required>
                 </div>
 
-                <div class="field">
-                    <label for="signer_name">Nome do assinante</label>
-                    <input id="signer_name" name="signer_name" type="text" value="<?= Response::escape($formData['signer_name']) ?>" required>
-                </div>
-
-                <div class="field">
-                    <label for="signer_email">E-mail do assinante</label>
-                    <input id="signer_email" name="signer_email" type="email" value="<?= Response::escape($formData['signer_email']) ?>" required>
-                </div>
-
                 <div class="field-full">
-                    <label for="signer_cpf">CPF do assinante</label>
-                    <input id="signer_cpf" name="signer_cpf" type="text" value="<?= Response::escape($formData['signer_cpf']) ?>" required>
-                    <span class="field-hint">O codigo de acesso sera formado pelos ultimos 6 digitos do CPF.</span>
+                    <div class="signers-heading">
+                        <div>
+                            <label>Assinantes</label>
+                            <span class="field-hint">Cada assinante recebe seu proprio codigo de acesso, formado pelos ultimos 6 digitos do CPF.</span>
+                        </div>
+                        <button class="button-secondary button-inline" type="button" data-add-signer>Adicionar assinante</button>
+                    </div>
+
+                    <div class="signers-list" data-signers-list>
+                        <?php foreach ($formData['signers'] as $index => $signer): ?>
+                            <fieldset class="signer-card" data-signer-card>
+                                <legend>Assinante <?= Response::escape((string) ($index + 1)) ?></legend>
+                                <div class="form-grid signer-grid">
+                                    <div class="field">
+                                        <label for="signer_name_<?= Response::escape((string) $index) ?>">Nome</label>
+                                        <input id="signer_name_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][name]" type="text" value="<?= Response::escape($signer['name']) ?>" required>
+                                    </div>
+
+                                    <div class="field">
+                                        <label for="signer_email_<?= Response::escape((string) $index) ?>">E-mail</label>
+                                        <input id="signer_email_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][email]" type="email" value="<?= Response::escape($signer['email']) ?>" required>
+                                    </div>
+
+                                    <div class="field">
+                                        <label for="signer_cpf_<?= Response::escape((string) $index) ?>">CPF</label>
+                                        <input id="signer_cpf_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][cpf]" type="text" value="<?= Response::escape($signer['cpf']) ?>" required>
+                                    </div>
+
+                                    <div class="field signer-remove-field">
+                                        <button class="action-button danger-action" type="button" data-remove-signer <?= $index === 0 ? 'disabled' : '' ?>>Remover</button>
+                                    </div>
+                                </div>
+                            </fieldset>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </div>
 
@@ -172,10 +237,38 @@ render_app_header($currentUser, 'novo-envio');
         </form>
     </div>
 </section>
+<template data-signer-template>
+    <fieldset class="signer-card" data-signer-card>
+        <legend>Assinante __NUMBER__</legend>
+        <div class="form-grid signer-grid">
+            <div class="field">
+                <label for="signer_name___INDEX__">Nome</label>
+                <input id="signer_name___INDEX__" name="signers[__INDEX__][name]" type="text" required>
+            </div>
+
+            <div class="field">
+                <label for="signer_email___INDEX__">E-mail</label>
+                <input id="signer_email___INDEX__" name="signers[__INDEX__][email]" type="email" required>
+            </div>
+
+            <div class="field">
+                <label for="signer_cpf___INDEX__">CPF</label>
+                <input id="signer_cpf___INDEX__" name="signers[__INDEX__][cpf]" type="text" required>
+            </div>
+
+            <div class="field signer-remove-field">
+                <button class="action-button danger-action" type="button" data-remove-signer>Remover</button>
+            </div>
+        </div>
+    </fieldset>
+</template>
 <script>
     const uploadInput = document.querySelector('.upload-input');
     const uploadDropzone = document.querySelector('.upload-dropzone');
     const uploadFileName = document.querySelector('.upload-file-name');
+    const signersList = document.querySelector('[data-signers-list]');
+    const signerTemplate = document.querySelector('[data-signer-template]');
+    const addSignerButton = document.querySelector('[data-add-signer]');
 
     if (uploadInput && uploadDropzone && uploadFileName) {
         const syncFileName = () => {
@@ -207,6 +300,66 @@ render_app_header($currentUser, 'novo-envio');
                 syncFileName();
             }
         });
+    }
+
+    if (signersList && signerTemplate && addSignerButton) {
+        const refreshSigners = () => {
+            const cards = Array.from(signersList.querySelectorAll('[data-signer-card]'));
+
+            cards.forEach((card, index) => {
+                const number = index + 1;
+                const legend = card.querySelector('legend');
+                const removeButton = card.querySelector('[data-remove-signer]');
+
+                if (legend) {
+                    legend.textContent = `Assinante ${number}`;
+                }
+
+                card.querySelectorAll('input').forEach((input) => {
+                    const field = input.name.match(/\[(name|email|cpf)\]$/)?.[1];
+
+                    if (field) {
+                        input.name = `signers[${index}][${field}]`;
+                        input.id = `signer_${field}_${index}`;
+                    }
+                });
+
+                card.querySelectorAll('label').forEach((label) => {
+                    const input = label.nextElementSibling;
+
+                    if (input && input.id) {
+                        label.setAttribute('for', input.id);
+                    }
+                });
+
+                if (removeButton) {
+                    removeButton.disabled = cards.length === 1;
+                }
+            });
+        };
+
+        addSignerButton.addEventListener('click', () => {
+            const index = signersList.querySelectorAll('[data-signer-card]').length;
+            const html = signerTemplate.innerHTML
+                .replaceAll('__INDEX__', String(index))
+                .replaceAll('__NUMBER__', String(index + 1));
+
+            signersList.insertAdjacentHTML('beforeend', html);
+            refreshSigners();
+        });
+
+        signersList.addEventListener('click', (event) => {
+            const target = event.target;
+
+            if (!(target instanceof HTMLElement) || !target.matches('[data-remove-signer]')) {
+                return;
+            }
+
+            target.closest('[data-signer-card]')?.remove();
+            refreshSigners();
+        });
+
+        refreshSigners();
     }
 </script>
 <?php render_page_end(); ?>
