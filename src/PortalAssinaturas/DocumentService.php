@@ -40,12 +40,14 @@ final class DocumentService
         string $documentName,
         string $signerName,
         string $signerEmail,
-        ?string $signerCpf = null
+        ?string $signerCpf = null,
+        ?string $uploadedFileName = null
     ): array {
         $documentName = trim($documentName);
         $signerName = trim($signerName);
         $signerEmail = strtolower(trim($signerEmail));
         $signerCpf = $this->sanitizeCpf($signerCpf);
+        $uploadedFileName = $this->ensurePdfFileName($uploadedFileName ?: $documentName);
 
         if ($documentName === '' || $signerName === '' || !filter_var($signerEmail, FILTER_VALIDATE_EMAIL)) {
             throw new RuntimeException('Dados do documento ou do assinante invalidos para criar o lote.');
@@ -55,39 +57,16 @@ final class DocumentService
             throw new RuntimeException('O CPF do assinante e obrigatorio para o fluxo de assinatura eletronica deste MVP.');
         }
 
-        $payload = [
-            'documents' => [
-                [
-                    'typeId' => 1,
-                    'document' => [
-                        'name' => $documentName,
-                        'upload' => [
-                            'id' => $uploadId,
-                            'name' => $documentName,
-                        ],
-                    ],
-                    'electronicSigners' => [
-                        [
-                            'step' => 1,
-                            'title' => 'Assinante',
-                            'name' => $signerName,
-                            'email' => $signerEmail,
-                            'individualIdentificationCode' => $signerCpf,
-                            'identificationType' => [
-                                'accessCode' => true,
-                            ],
-                            'accessCode' => $this->buildAccessCode($signerCpf),
-                        ],
-                    ],
-                ],
-            ],
-        ];
-
-        $response = $this->apiClient->post(PortalEndpoints::CREATE_BATCH, $payload, $this->userId);
+        $documentPayload = $this->buildDocumentPayload($uploadId, $documentName, $uploadedFileName, $signerName, $signerEmail, $signerCpf);
+        $response = $this->createDocumentThroughSupportedEndpoint($documentPayload);
         $normalized = $this->normalizeCreateBatchResponse($response);
 
-        if ($normalized['portal_document_id'] === null || $normalized['sign_url'] === null) {
-            throw new ApiException('A API nao retornou os dados minimos esperados para o lote.', null, $response);
+        if (
+            $normalized['portal_document_id'] === null
+            || $normalized['document_key'] === null
+            || $normalized['sign_url'] === null
+        ) {
+            throw new ApiException('A API nao retornou os dados minimos esperados para o lote, incluindo a chave do documento.', null, $response);
         }
 
         return $normalized + ['raw' => $response];
@@ -179,13 +158,114 @@ final class DocumentService
     {
         $document = $response['documents'][0] ?? $response['document'] ?? [];
         $attendee = $response['attendees'][0] ?? [];
+        $signUrl = $document['signUrl'] ?? $response['signUrl'] ?? $response['batchSignUrl'] ?? $attendee['signUrl'] ?? null;
 
         return [
             'portal_document_id' => $document['id'] ?? $response['id'] ?? null,
-            'document_key' => $document['key'] ?? $response['key'] ?? $attendee['key'] ?? null,
-            'sign_url' => $document['signUrl'] ?? $response['signUrl'] ?? $response['batchSignUrl'] ?? $attendee['signUrl'] ?? null,
+            'document_key' => $document['key']
+                ?? $document['chave']
+                ?? $response['key']
+                ?? $response['chave']
+                ?? $attendee['key']
+                ?? $attendee['chave']
+                ?? $this->inferDocumentKeyFromSignUrl($signUrl),
+            'sign_url' => $signUrl,
             'errors' => $response['errors'] ?? [],
         ];
+    }
+
+    private function buildDocumentPayload(
+        string $uploadId,
+        string $documentName,
+        string $uploadedFileName,
+        string $signerName,
+        string $signerEmail,
+        string $signerCpf
+    ): array {
+        return [
+            'document' => [
+                'name' => $documentName,
+                'upload' => [
+                    'id' => $uploadId,
+                    'name' => $uploadedFileName,
+                ],
+            ],
+            'electronicSigners' => [
+                [
+                    'step' => 1,
+                    'title' => 'Assinante',
+                    'name' => $signerName,
+                    'email' => $signerEmail,
+                    'individualIdentificationCode' => $signerCpf,
+                    'identificationType' => [
+                        'accessCode' => true,
+                    ],
+                    'accessCode' => $this->buildAccessCode($signerCpf),
+                ],
+            ],
+        ];
+    }
+
+    private function createDocumentThroughSupportedEndpoint(array $documentPayload): array
+    {
+        try {
+            return $this->apiClient->post(
+                PortalEndpoints::CREATE_BATCH,
+                ['documents' => [$documentPayload]],
+                $this->userId
+            );
+        } catch (ApiException $exception) {
+            $responseBody = $exception->getResponseBody();
+            $errorCode = is_array($responseBody) ? ($responseBody['code'] ?? null) : null;
+
+            if ($exception->getStatusCode() !== 406 || $errorCode !== 739) {
+                throw $exception;
+            }
+        }
+
+        return $this->apiClient->post(PortalEndpoints::CREATE, $documentPayload, $this->userId);
+    }
+
+    private function ensurePdfFileName(string $fileName): string
+    {
+        $trimmed = trim($fileName);
+
+        if ($trimmed === '') {
+            return 'documento.pdf';
+        }
+
+        $extension = strtolower(pathinfo($trimmed, PATHINFO_EXTENSION));
+
+        if ($extension === 'pdf') {
+            return $trimmed;
+        }
+
+        return $trimmed . '.pdf';
+    }
+
+    private function inferDocumentKeyFromSignUrl(?string $signUrl): ?string
+    {
+        if (!is_string($signUrl) || trim($signUrl) === '') {
+            return null;
+        }
+
+        $query = parse_url($signUrl, PHP_URL_QUERY);
+
+        if (!is_string($query) || $query === '') {
+            return null;
+        }
+
+        parse_str($query, $params);
+
+        foreach (['key', 'documentKey', 'document_key'] as $candidate) {
+            $value = $params[$candidate] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+        }
+
+        return null;
     }
 
     private function extractPackageBytes(array $response): string

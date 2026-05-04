@@ -92,7 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $formData['document_name'],
                     $formData['signer_name'],
                     $formData['signer_email'],
-                    $formData['signer_cpf']
+                    $formData['signer_cpf'],
+                    $uploadedFileName
                 );
 
                 $documentRepository->updateAfterCreateBatch($localDocumentId, [
@@ -182,9 +183,9 @@ render_page_start('Painel');
 <section class="hero-card">
     <div class="topbar">
         <div>
-            <div class="hero-eyebrow">Fluxo completo do case</div>
+            <div class="hero-eyebrow">Sandbox V2 conectado</div>
             <h1>Portal de Assinaturas</h1>
-            <p class="lead">Envie um PDF, gere o lote no sandbox, acompanhe o link de assinatura, valide o resultado e baixe o pacote final sem sair do painel.</p>
+            <p class="lead">Envie um PDF, gere o documento para assinatura eletronica remota, acompanhe o link do assinante e valide o pacote final em um unico painel.</p>
         </div>
 
         <div>
@@ -199,7 +200,6 @@ render_page_start('Painel');
 <section class="grid-main">
     <div class="panel">
         <h2>Novo envio</h2>
-        <p class="lead">O PDF e enviado para `/document/upload` e, na sequencia, o lote e criado via `/document/createBatch`.</p>
 
         <?php if ($uploadErrors !== []): ?>
             <div class="inline-errors">
@@ -218,6 +218,7 @@ render_page_start('Painel');
                 <div class="field-full">
                     <label for="pdf">Arquivo PDF</label>
                     <input id="pdf" name="pdf" type="file" accept="application/pdf,.pdf" required>
+                    <span class="field-hint">Use um arquivo com extensao .pdf para que a API aceite a criacao do documento.</span>
                 </div>
 
                 <div class="field-full">
@@ -238,6 +239,7 @@ render_page_start('Painel');
                 <div class="field-full">
                     <label for="signer_cpf">CPF do assinante</label>
                     <input id="signer_cpf" name="signer_cpf" type="text" value="<?= Response::escape($formData['signer_cpf']) ?>" required>
+                    <span class="field-hint">O codigo de acesso sera formado pelos ultimos 6 digitos do CPF.</span>
                 </div>
             </div>
 
@@ -251,7 +253,7 @@ render_page_start('Painel');
 
     <div class="panel">
         <h2>Documentos enviados</h2>
-        <p class="lead">A listagem mostra apenas os registros do usuario autenticado e permite validar, baixar o pacote e excluir cada documento.</p>
+        <p class="lead">Acompanhe o status, abra o link do assinante e use o codigo de acesso exibido para concluir os testes no sandbox.</p>
 
         <div class="table-wrap">
             <table>
@@ -274,16 +276,25 @@ render_page_start('Painel');
                 <?php endif; ?>
 
                 <?php foreach ($documents as $document): ?>
+                    <?php $hasDocumentKey = trim((string) ($document['document_key'] ?? '')) !== ''; ?>
+                    <?php $signerCpfDigits = preg_replace('/\D+/', '', (string) ($document['signer_cpf'] ?? '')) ?: ''; ?>
+                    <?php $accessCode = $signerCpfDigits !== '' ? substr(str_pad($signerCpfDigits, 6, '0', STR_PAD_LEFT), -6) : ''; ?>
                     <tr>
-                        <td>#<?= Response::escape($document['id']) ?></td>
-                        <td><?= Response::escape($document['portal_document_id'] ?? '-') ?></td>
+                        <td><span class="mono">#<?= Response::escape($document['id']) ?></span></td>
+                        <td><span class="mono"><?= Response::escape($document['portal_document_id'] ?? '-') ?></span></td>
                         <td>
                             <strong><?= Response::escape($document['document_name']) ?></strong><br>
                             <span class="muted">Criado em <?= Response::escape($document['created_at']) ?></span>
+                            <?php if ($hasDocumentKey): ?>
+                                <br><span class="key-pill">Chave <?= Response::escape((string) $document['document_key']) ?></span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?= Response::escape($document['signer_name']) ?><br>
                             <span class="muted"><?= Response::escape($document['signer_email']) ?></span>
+                            <?php if ($accessCode !== ''): ?>
+                                <br><span class="access-code">Acesso <?= Response::escape($accessCode) ?></span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <span class="badge <?= Response::escape(status_badge_class((string) $document['status'])) ?>">
@@ -292,7 +303,7 @@ render_page_start('Painel');
                         </td>
                         <td>
                             <?php if (!empty($document['sign_url'])): ?>
-                                <a href="<?= Response::escape((string) $document['sign_url']) ?>" target="_blank" rel="noreferrer">Abrir link</a>
+                                <a class="inline-link" href="<?= Response::escape((string) $document['sign_url']) ?>" target="_blank" rel="noreferrer">Abrir assinatura</a>
                             <?php else: ?>
                                 <span class="muted">Aguardando geracao</span>
                             <?php endif; ?>
@@ -302,13 +313,21 @@ render_page_start('Painel');
                                 <form method="post">
                                     <input type="hidden" name="action" value="validate_document">
                                     <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
-                                    <button class="button-inline button-secondary" type="submit">Validar</button>
+                                    <button
+                                        class="button-inline button-secondary"
+                                        type="submit"
+                                        <?= $hasDocumentKey ? '' : 'disabled title="A chave do documento e obrigatoria para validar assinaturas."' ?>
+                                    >Validar</button>
                                 </form>
 
                                 <form method="post">
                                     <input type="hidden" name="action" value="download_package">
                                     <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
-                                    <button class="button-inline button-ghost" type="submit">Baixar pacote</button>
+                                    <button
+                                        class="button-inline button-ghost"
+                                        type="submit"
+                                        <?= $hasDocumentKey ? '' : 'disabled title="A chave do documento e obrigatoria para baixar o pacote."' ?>
+                                    >Baixar pacote</button>
                                 </form>
 
                                 <form method="post" onsubmit="return confirm('Deseja excluir este documento?');">

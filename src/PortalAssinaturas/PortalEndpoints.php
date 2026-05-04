@@ -7,6 +7,7 @@ namespace App\PortalAssinaturas;
 final class PortalEndpoints
 {
     public const UPLOAD = '/document/upload';
+    public const CREATE = '/document/create';
     public const CREATE_BATCH = '/document/createBatch';
     public const VALIDATE_SIGNATURES = '/document/ValidateSignatures';
     public const PACKAGE = '/document/package';

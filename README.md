@@ -64,10 +64,20 @@ Copy-Item .env.example .env
 2. Ajuste as variaveis no `.env`:
 
 ```env
-PORTAL_BASE_URL=https://desenvolvedor.portaldeassinaturas.com.br
+PORTAL_BASE_URL=https://api-sbx.portaldeassinaturas.com.br
 PORTAL_API_TOKEN=seu_token_aqui
+PORTAL_API_CODE=
+PORTAL_API_BASE_PATH=api/v2
 DATABASE_PATH=storage/database.sqlite
 ```
+
+`PORTAL_BASE_URL` deve apontar para a base do gateway da API do ambiente escolhido. Nao use a URL do portal de documentacao como valor padrao apenas por ela exibir o Swagger.
+
+Na API V2, o Swagger informa autenticacao por cabecalhos `token` e `code`. O `code` pode ficar vazio se o seu ambiente nao exigir esse segundo cabecalho.
+
+No sandbox V2 deste case, o gateway exposto no Swagger usa `https://api-sbx.portaldeassinaturas.com.br/api/v2`.
+
+Embora o Swagger marque `typeId` como obrigatorio, o comportamento real validado no sandbox V2 deste case foi o oposto: o fluxo de `document/create` funcionou quando o campo foi omitido.
 
 ## Como obter o token sandbox
 

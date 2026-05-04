@@ -31,22 +31,26 @@ final class ApiClient
     private function request(string $method, string $endpoint, ?array $payload, ?int $userId): array
     {
         $baseUrl = rtrim((string) Env::get('PORTAL_BASE_URL', ''), '/');
+        $basePath = trim((string) Env::get('PORTAL_API_BASE_PATH', ''), '/');
         $token = (string) Env::get('PORTAL_API_TOKEN', '');
+        $code = trim((string) Env::get('PORTAL_API_CODE', ''));
 
         if ($baseUrl === '' || $token === '') {
             throw new ApiException('As variaveis PORTAL_BASE_URL e PORTAL_API_TOKEN precisam estar configuradas no .env.');
         }
 
-        $url = $baseUrl . '/' . ltrim($endpoint, '/');
+        $url = $this->buildUrl($baseUrl, $basePath, $endpoint);
         $curl = curl_init($url);
         $requestBody = $payload !== null ? json_encode($payload, JSON_UNESCAPED_UNICODE) : null;
 
         $headers = [
             'Accept: application/json',
-            'Authorization: Bearer ' . $token,
-            'Ocp-Apim-Subscription-Key: ' . $token,
-            'X-API-Token: ' . $token,
+            'token: ' . $token,
         ];
+
+        if ($code !== '') {
+            $headers[] = 'code: ' . $code;
+        }
 
         if ($requestBody !== null) {
             $headers[] = 'Content-Type: application/json';
@@ -87,12 +91,8 @@ final class ApiClient
 
         $this->apiLogs->create($userId, $method, $endpoint, $statusCode, $requestBody, $loggedResponseBody);
 
-        if ($statusCode >= 400) {
-            $message = 'A API retornou erro HTTP ' . $statusCode . '.';
-
-            if (is_array($decoded) && isset($decoded['message']) && is_string($decoded['message'])) {
-                $message = $decoded['message'];
-            }
+        if ($statusCode >= 300) {
+            $message = $this->buildErrorMessage($statusCode, $decoded, $baseUrl, $basePath, $endpoint);
 
             throw new ApiException($message, $statusCode, $decoded);
         }
@@ -145,5 +145,74 @@ final class ApiClient
     private function stringifyForLog(array $decoded): string
     {
         return json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
+    }
+
+    private function buildUrl(string $baseUrl, string $basePath, string $endpoint): string
+    {
+        $path = ltrim($endpoint, '/');
+
+        if ($basePath !== '') {
+            return $baseUrl . '/' . $basePath . '/' . $path;
+        }
+
+        return $baseUrl . '/' . $path;
+    }
+
+    private function buildErrorMessage(int $statusCode, array $decoded, string $baseUrl, string $basePath, string $endpoint): string
+    {
+        if (isset($decoded['message']) && is_string($decoded['message'])) {
+            return $decoded['message'];
+        }
+
+        if ($statusCode === 404 && $this->looksLikeHtmlResponse($decoded)) {
+            $configuredUrl = rtrim($baseUrl . '/' . trim($basePath, '/'), '/');
+
+            return 'A API retornou HTTP 404 ao chamar `'
+                . $this->buildUrl($baseUrl, $basePath, $endpoint)
+                . '`. Verifique se `PORTAL_BASE_URL` aponta para o gateway da API do ambiente correto e nao para o portal de documentacao. '
+                . 'Se a sua integracao exigir um prefixo, configure `PORTAL_API_BASE_PATH` no `.env`. URL base atual: `'
+                . $configuredUrl
+                . '`.';
+        }
+
+        if ($statusCode >= 300 && $statusCode < 400 && $this->looksLikeHtmlResponse($decoded)) {
+            $configuredUrl = rtrim($baseUrl . '/' . trim($basePath, '/'), '/');
+
+            return 'A API retornou HTTP ' . $statusCode
+                . ' ao chamar `'
+                . $this->buildUrl($baseUrl, $basePath, $endpoint)
+                . '`, redirecionando para uma pagina HTML do portal em vez de responder JSON. '
+                . 'Isso indica que `PORTAL_BASE_URL` e/ou `PORTAL_API_BASE_PATH` nao apontam para o gateway correto da API. '
+                . 'URL base atual: `'
+                . $configuredUrl
+                . '`.';
+        }
+
+        return 'A API retornou erro HTTP ' . $statusCode . '.';
+    }
+
+    private function looksLikeHtmlResponse(array $decoded): bool
+    {
+        $contentType = strtolower((string) ($decoded['contentType'] ?? ''));
+
+        if (str_contains($contentType, 'text/html')) {
+            return true;
+        }
+
+        $rawBody = $decoded['rawBody'] ?? null;
+
+        if (!is_string($rawBody) || $rawBody === '') {
+            return false;
+        }
+
+        $decodedBody = base64_decode($rawBody, true);
+
+        if ($decodedBody === false) {
+            return false;
+        }
+
+        $trimmed = ltrim($decodedBody);
+
+        return str_starts_with($trimmed, '<!DOCTYPE html') || str_starts_with($trimmed, '<html');
     }
 }
