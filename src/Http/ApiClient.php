@@ -63,6 +63,8 @@ final class ApiClient
             CURLOPT_TIMEOUT => 60,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_HEADER => true,
+            CURLOPT_PROXY => '',
+            CURLOPT_NOPROXY => '*',
         ]);
 
         if ($requestBody !== null) {
