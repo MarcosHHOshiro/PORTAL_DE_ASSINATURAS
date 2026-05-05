@@ -125,6 +125,21 @@ render_app_header($currentUser, 'documentos');
             <span>Pesquisar</span>
             <input id="document_search" type="search" placeholder="Buscar por titulo, chave, assinante ou e-mail" data-document-search>
         </label>
+
+        <label class="status-filter-field" for="document_status_filter">
+            <span>Status</span>
+            <select id="document_status_filter" data-document-status-filter>
+                <option value="">Todos</option>
+                <option value="CREATED">Criado</option>
+                <option value="UPLOADED">Enviado</option>
+                <option value="SENT_TO_SIGNATURE">Em assinatura</option>
+                <option value="PENDING_SIGNATURE">Pendente</option>
+                <option value="SIGNED">Assinado</option>
+                <option value="INVALID">Invalido</option>
+                <option value="ERROR">Erro</option>
+                <option value="DELETED">Excluido</option>
+            </select>
+        </label>
     </div>
 
     <div class="document-list">
@@ -159,7 +174,7 @@ render_app_header($currentUser, 'documentos');
                     ),
                 ]))));
             ?>
-            <article class="document-card" data-document-card data-search="<?= Response::escape($searchText) ?>">
+            <article class="document-card" data-document-card data-status="<?= Response::escape($documentStatus) ?>" data-search="<?= Response::escape($searchText) ?>">
                 <div class="document-card-header">
                     <div class="document-icon" aria-hidden="true">DOC</div>
                     <div class="document-title-block">
@@ -270,16 +285,20 @@ render_app_header($currentUser, 'documentos');
 </section>
 <script>
     const documentSearchInput = document.querySelector('[data-document-search]');
+    const documentStatusFilter = document.querySelector('[data-document-status-filter]');
     const documentCards = Array.from(document.querySelectorAll('[data-document-card]'));
     const emptySearchState = document.querySelector('[data-empty-search]');
 
-    if (documentSearchInput && documentCards.length > 0) {
-        documentSearchInput.addEventListener('input', () => {
-            const query = documentSearchInput.value.trim().toLowerCase();
+    if ((documentSearchInput || documentStatusFilter) && documentCards.length > 0) {
+        const applyDocumentFilters = () => {
+            const query = documentSearchInput ? documentSearchInput.value.trim().toLowerCase() : '';
+            const status = documentStatusFilter ? documentStatusFilter.value : '';
             let visibleCount = 0;
 
             documentCards.forEach((card) => {
-                const matches = query === '' || (card.dataset.search || '').includes(query);
+                const matchesSearch = query === '' || (card.dataset.search || '').includes(query);
+                const matchesStatus = status === '' || card.dataset.status === status;
+                const matches = matchesSearch && matchesStatus;
                 card.hidden = !matches;
 
                 if (matches) {
@@ -290,7 +309,10 @@ render_app_header($currentUser, 'documentos');
             if (emptySearchState) {
                 emptySearchState.hidden = visibleCount > 0;
             }
-        });
+        };
+
+        documentSearchInput?.addEventListener('input', applyDocumentFilters);
+        documentStatusFilter?.addEventListener('change', applyDocumentFilters);
     }
 </script>
 <?php
