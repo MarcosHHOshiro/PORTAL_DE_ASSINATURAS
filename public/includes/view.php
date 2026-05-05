@@ -65,26 +65,42 @@ if (!function_exists('render_app_header')) {
     function render_app_header(array $currentUser, string $activePage): void
     {
         ?>
-        <header class="app-header">
-            <div class="app-header-inner">
+        <aside class="app-sidebar" aria-label="Navegacao principal">
+            <div class="sidebar-top">
                 <div class="brand-block">
                     <div class="brand-mark">PA</div>
                     <div>
                         <div class="brand-title">Portal de Assinaturas</div>
-                        <div class="brand-subtitle">Sandbox V2 conectado</div>
+                        <div class="brand-subtitle">Ambiente Sandbox</div>
                     </div>
                 </div>
 
-                <nav class="header-nav" aria-label="Navegacao principal">
-                    <a class="<?= $activePage === 'novo-envio' ? 'is-active' : '' ?>" href="/novo-envio.php">Novo envio</a>
-                    <a class="<?= $activePage === 'documentos' ? 'is-active' : '' ?>" href="/index.php">Documentos</a>
+                <nav class="sidebar-nav">
+                    <a class="<?= $activePage === 'novo-envio' ? 'is-active' : '' ?>" href="/novo-envio.php">
+                        <span>Novo envio</span>
+                    </a>
+                    <a class="<?= $activePage === 'documentos' ? 'is-active' : '' ?>" href="/index.php">
+                        <span>Documentos</span>
+                    </a>
                 </nav>
-
-                <div class="user-menu">
-                    <span><?= Response::escape($currentUser['name'] ?? '') ?></span>
-                    <a class="button-link button-secondary" href="/logout.php">Sair</a>
-                </div>
             </div>
+
+            <div class="sidebar-bottom">
+                <a class="sidebar-settings" href="#" aria-disabled="true">Configuracoes</a>
+                <div class="user-menu">
+                    <span class="user-label">Usuario</span>
+                    <strong><?= Response::escape($currentUser['name'] ?? '') ?></strong>
+                </div>
+                <a class="button-link button-secondary sidebar-logout" href="/logout.php">Sair</a>
+            </div>
+        </aside>
+        <header class="content-topbar">
+            <nav class="breadcrumb" aria-label="Localizacao">
+                <span><?= $activePage === 'novo-envio' ? 'Criacao' : 'Gestao' ?></span>
+                <span aria-hidden="true">&gt;</span>
+                <strong><?= $activePage === 'novo-envio' ? 'Configurar Novo Documento' : 'Historico de Documentos' ?></strong>
+            </nav>
+            <span class="api-status" aria-label="API conectada">API Conectada</span>
         </header>
         <?php
     }

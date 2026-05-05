@@ -154,113 +154,123 @@ function build_signer_summary(array $signers): string
 render_page_start('Novo Envio');
 render_app_header($currentUser, 'novo-envio');
 ?>
-<section class="single-page-layout">
-    <div class="panel upload-panel upload-panel-standalone">
-        <p class="section-kicker">Criacao</p>
-        <h1>Novo envio</h1>
-        <p class="lead">Envie um PDF para assinatura eletronica remota e gere o link que sera usado pelo assinante.</p>
-
-        <?php if ($uploadErrors !== []): ?>
-            <div class="inline-errors">
-                <ul>
-                    <?php foreach ($uploadErrors as $error): ?>
-                        <li><?= Response::escape($error) ?></li>
-                    <?php endforeach; ?>
-                </ul>
-            </div>
-        <?php endif; ?>
-
-        <form method="post" enctype="multipart/form-data" novalidate>
-            <div class="form-grid">
-                <div class="field-full">
-                    <label for="pdf">Arquivo PDF</label>
-                    <label class="upload-dropzone" for="pdf">
-                        <input id="pdf" class="upload-input" name="pdf" type="file" accept="application/pdf,.pdf" required>
-                        <span class="upload-icon" aria-hidden="true">PDF</span>
-                        <span class="upload-title">Arraste o PDF aqui</span>
-                        <span class="upload-subtitle">ou clique para selecionar</span>
-                        <span class="upload-file-name" data-empty-text="Nenhum arquivo selecionado">Nenhum arquivo selecionado</span>
-                    </label>
-                    <span class="field-hint">Use um arquivo com extensao .pdf para que a API aceite a criacao do documento.</span>
-                </div>
-
-                <div class="field-full">
-                    <label for="document_name">Nome do documento</label>
-                    <input id="document_name" name="document_name" type="text" value="<?= Response::escape($formData['document_name']) ?>" required>
-                </div>
-
-                <div class="field-full">
-                    <div class="signers-heading">
-                        <div>
-                            <label>Assinantes</label>
-                            <span class="field-hint">Cada assinante recebe seu proprio codigo de acesso, formado pelos ultimos 6 digitos do CPF.</span>
-                        </div>
-                        <button class="button-secondary button-inline" type="button" data-add-signer>Adicionar assinante</button>
-                    </div>
-
-                    <div class="signers-list" data-signers-list>
-                        <?php foreach ($formData['signers'] as $index => $signer): ?>
-                            <fieldset class="signer-card" data-signer-card>
-                                <legend>Assinante <?= Response::escape((string) ($index + 1)) ?></legend>
-                                <div class="form-grid signer-grid">
-                                    <div class="field">
-                                        <label for="signer_name_<?= Response::escape((string) $index) ?>">Nome</label>
-                                        <input id="signer_name_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][name]" type="text" value="<?= Response::escape($signer['name']) ?>" required>
-                                    </div>
-
-                                    <div class="field">
-                                        <label for="signer_email_<?= Response::escape((string) $index) ?>">E-mail</label>
-                                        <input id="signer_email_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][email]" type="email" value="<?= Response::escape($signer['email']) ?>" required>
-                                    </div>
-
-                                    <div class="field">
-                                        <label for="signer_cpf_<?= Response::escape((string) $index) ?>">CPF</label>
-                                        <input id="signer_cpf_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][cpf]" type="text" value="<?= Response::escape($signer['cpf']) ?>" required>
-                                    </div>
-
-                                    <div class="field signer-remove-field">
-                                        <button class="action-button danger-action" type="button" data-remove-signer <?= $index === 0 ? 'disabled' : '' ?>>Remover</button>
-                                    </div>
-                                </div>
-                            </fieldset>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="button-row">
-                <button class="button-primary" type="submit">Enviar para assinatura</button>
-                <a class="button-link button-secondary" href="/index.php">Ver documentos</a>
-            </div>
-
-            <p class="helper">Neste MVP o CPF tambem e usado para compor o codigo de acesso do assinante na assinatura eletronica.</p>
-        </form>
+<section class="panel document-config-page">
+    <div class="section-heading">
+        <div>
+            <p class="section-kicker">Criacao</p>
+            <h1>Criar Novo Fluxo de Assinatura</h1>
+            <p>Carregue o seu ficheiro PDF e configure os destinatarios para recolha de assinaturas eletronicas.</p>
+        </div>
     </div>
+
+    <?php if ($uploadErrors !== []): ?>
+        <div class="inline-errors">
+            <ul>
+                <?php foreach ($uploadErrors as $error): ?>
+                    <li><?= Response::escape($error) ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
+
+    <form class="workflow-form" method="post" enctype="multipart/form-data" novalidate>
+        <section class="form-step" aria-labelledby="step-document-title">
+            <div class="step-heading">
+                <div>
+                    <h2 id="step-document-title">1. Documento origem</h2>
+                    <p>Arquivo PDF que sera enviado para assinatura.</p>
+                </div>
+            </div>
+
+            <div class="field-full">
+                <label class="upload-dropzone" for="pdf">
+                    <input id="pdf" class="upload-input" name="pdf" type="file" accept="application/pdf,.pdf" required>
+                    <span class="upload-icon" aria-hidden="true">PDF</span>
+                    <span class="upload-title">Clique para selecionar ou arraste o PDF aqui</span>
+                    <span class="upload-subtitle">Apenas arquivos PDF</span>
+                    <span class="upload-file-name" data-empty-text="Nenhum arquivo selecionado">Nenhum arquivo selecionado</span>
+                </label>
+            </div>
+
+            <div class="form-step-footer">
+                <div class="field-full">
+                    <label for="document_name">Titulo interno do documento</label>
+                    <input id="document_name" name="document_name" type="text" value="<?= Response::escape($formData['document_name']) ?>" placeholder="Ex: Contrato de Prestacao de Servicos - Cliente X" required>
+                </div>
+            </div>
+        </section>
+
+        <section class="form-step" aria-labelledby="step-signers-title">
+            <div class="step-heading">
+                <div>
+                    <h2 id="step-signers-title">2. Destinatarios e signatarios</h2>
+                    <p>Cada assinante recebera um link proprio e codigo de acesso.</p>
+                </div>
+                <button class="button-primary button-inline" type="button" data-add-signer>+ Adicionar Assinante</button>
+            </div>
+
+            <div class="signers-list" data-signers-list>
+                <?php foreach ($formData['signers'] as $index => $signer): ?>
+                    <div class="signer-card <?= $index > 0 ? 'has-remove-action' : '' ?>" data-signer-card>
+                        <strong class="signer-card-title" data-signer-title>Assinante <?= Response::escape((string) ($index + 1)) ?></strong>
+                        <div class="form-grid signer-grid">
+                            <div class="field">
+                                <label for="signer_name_<?= Response::escape((string) $index) ?>">Nome completo</label>
+                                <input id="signer_name_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][name]" type="text" value="<?= Response::escape($signer['name']) ?>" placeholder="Joao da Silva" required>
+                            </div>
+
+                            <div class="field">
+                                <label for="signer_email_<?= Response::escape((string) $index) ?>">E-mail corporativo</label>
+                                <input id="signer_email_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][email]" type="email" value="<?= Response::escape($signer['email']) ?>" placeholder="joao@empresa.com" required>
+                            </div>
+
+                            <div class="field">
+                                <label for="signer_cpf_<?= Response::escape((string) $index) ?>">Documento (CPF/NIF)</label>
+                                <input id="signer_cpf_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][cpf]" type="text" value="<?= Response::escape($signer['cpf']) ?>" placeholder="000.000.000-00" required>
+                            </div>
+
+                            <?php if ($index > 0): ?>
+                                <div class="field signer-remove-field">
+                                    <button class="action-button danger-action" type="button" data-remove-signer aria-label="Remover assinante">Remover</button>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
+
+        <div class="button-row">
+            <p class="action-note">O CPF sera utilizado como chave secundaria para compor o codigo de acesso unico do assinante.</p>
+            <a class="button-link button-secondary" href="/index.php">Cancelar Operacao</a>
+            <button class="button-primary" type="submit">Disparar para Assinatura</button>
+        </div>
+    </form>
 </section>
 <template data-signer-template>
-    <fieldset class="signer-card" data-signer-card>
-        <legend>Assinante __NUMBER__</legend>
+    <div class="signer-card has-remove-action" data-signer-card>
+        <strong class="signer-card-title" data-signer-title>Assinante __NUMBER__</strong>
         <div class="form-grid signer-grid">
             <div class="field">
-                <label for="signer_name___INDEX__">Nome</label>
-                <input id="signer_name___INDEX__" name="signers[__INDEX__][name]" type="text" required>
+                <label for="signer_name___INDEX__">Nome completo</label>
+                <input id="signer_name___INDEX__" name="signers[__INDEX__][name]" type="text" placeholder="Joao da Silva" required>
             </div>
 
             <div class="field">
-                <label for="signer_email___INDEX__">E-mail</label>
-                <input id="signer_email___INDEX__" name="signers[__INDEX__][email]" type="email" required>
+                <label for="signer_email___INDEX__">E-mail corporativo</label>
+                <input id="signer_email___INDEX__" name="signers[__INDEX__][email]" type="email" placeholder="joao@empresa.com" required>
             </div>
 
             <div class="field">
-                <label for="signer_cpf___INDEX__">CPF</label>
-                <input id="signer_cpf___INDEX__" name="signers[__INDEX__][cpf]" type="text" required>
+                <label for="signer_cpf___INDEX__">Documento (CPF/NIF)</label>
+                <input id="signer_cpf___INDEX__" name="signers[__INDEX__][cpf]" type="text" placeholder="000.000.000-00" required>
             </div>
 
             <div class="field signer-remove-field">
-                <button class="action-button danger-action" type="button" data-remove-signer>Remover</button>
+                <button class="action-button danger-action" type="button" data-remove-signer aria-label="Remover assinante">Remover</button>
             </div>
         </div>
-    </fieldset>
+    </div>
 </template>
 <script>
     const uploadInput = document.querySelector('.upload-input');
@@ -308,11 +318,11 @@ render_app_header($currentUser, 'novo-envio');
 
             cards.forEach((card, index) => {
                 const number = index + 1;
-                const legend = card.querySelector('legend');
+                const title = card.querySelector('[data-signer-title]');
                 const removeButton = card.querySelector('[data-remove-signer]');
 
-                if (legend) {
-                    legend.textContent = `Assinante ${number}`;
+                if (title) {
+                    title.textContent = `Assinante ${number}`;
                 }
 
                 card.querySelectorAll('input').forEach((input) => {
