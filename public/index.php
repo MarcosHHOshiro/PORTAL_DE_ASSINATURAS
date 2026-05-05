@@ -120,6 +120,13 @@ render_app_header($currentUser, 'documentos');
         <a class="button-link button-primary" href="/novo-envio.php">Novo envio</a>
     </div>
 
+    <div class="documents-toolbar">
+        <label class="search-field" for="document_search">
+            <span>Pesquisar</span>
+            <input id="document_search" type="search" placeholder="Buscar por titulo, chave, assinante ou e-mail" data-document-search>
+        </label>
+    </div>
+
     <div class="document-list">
         <?php if ($documents === []): ?>
             <div class="empty-state">
@@ -131,109 +138,161 @@ render_app_header($currentUser, 'documentos');
 
         <?php foreach ($documents as $document): ?>
             <?php $hasDocumentKey = trim((string) ($document['document_key'] ?? '')) !== ''; ?>
+            <?php $documentStatus = (string) $document['status']; ?>
             <?php $signerCpfDigits = preg_replace('/\D+/', '', (string) ($document['signer_cpf'] ?? '')) ?: ''; ?>
             <?php $accessCode = $signerCpfDigits !== '' ? substr(str_pad($signerCpfDigits, 6, '0', STR_PAD_LEFT), -6) : ''; ?>
             <?php $documentSigners = document_signers($document); ?>
-            <article class="document-card">
-                <div class="document-main">
-                    <strong class="document-title"><?= Response::escape($document['document_name']) ?></strong>
-                    <span class="document-date">Data: <?= Response::escape($document['created_at']) ?></span>
-                    <div class="meta-row">
-                        <span class="meta-chip">Portal: <?= Response::escape($document['portal_document_id'] ?? '-') ?></span>
-                        <span class="meta-chip">Local: #<?= Response::escape($document['id']) ?></span>
+            <?php
+                $searchText = strtolower(trim(implode(' ', array_filter([
+                    (string) ($document['document_name'] ?? ''),
+                    (string) ($document['document_key'] ?? ''),
+                    (string) ($document['portal_document_id'] ?? ''),
+                    (string) ($document['signer_name'] ?? ''),
+                    (string) ($document['signer_email'] ?? ''),
+                    ...array_map(
+                        static fn (array $signer): string => implode(' ', [
+                            (string) ($signer['name'] ?? ''),
+                            (string) ($signer['email'] ?? ''),
+                            (string) ($signer['cpf'] ?? ''),
+                        ]),
+                        $documentSigners
+                    ),
+                ]))));
+            ?>
+            <article class="document-card" data-document-card data-search="<?= Response::escape($searchText) ?>">
+                <div class="document-card-header">
+                    <div class="document-icon" aria-hidden="true">DOC</div>
+                    <div class="document-title-block">
+                        <strong class="document-title"><?= Response::escape($document['document_name']) ?></strong>
+                        <div class="document-inline-meta">
+                            <span><?= Response::escape($document['created_at']) ?></span>
+                            <span>ID: <?= Response::escape($document['portal_document_id'] ?? '-') ?></span>
+                            <span
+                                class="badge <?= Response::escape(status_badge_class($documentStatus)) ?>"
+                                title="Status tecnico: <?= Response::escape($documentStatus) ?>"
+                            >
+                                <?= Response::escape(status_label($documentStatus)) ?>
+                            </span>
+                        </div>
                     </div>
-                    <?php if ($hasDocumentKey): ?>
-                        <span class="document-key">Chave: <?= Response::escape((string) $document['document_key']) ?></span>
-                    <?php endif; ?>
+
+                    <div class="card-actions">
+                        <form method="post">
+                            <input type="hidden" name="action" value="validate_document">
+                            <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
+                            <button
+                                class="action-button"
+                                type="submit"
+                                title="<?= $hasDocumentKey ? 'Chamar a API para validar as assinaturas deste documento.' : 'A chave do documento e obrigatoria para validar assinaturas.' ?>"
+                                aria-label="Validar assinaturas"
+                                <?= $hasDocumentKey ? '' : 'disabled' ?>
+                            >Validar</button>
+                        </form>
+
+                        <form method="post">
+                            <input type="hidden" name="action" value="download_package">
+                            <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
+                            <button
+                                class="action-button"
+                                type="submit"
+                                title="<?= $hasDocumentKey ? 'Baixar pacote final com documento e comprovantes.' : 'A chave do documento e obrigatoria para baixar o pacote.' ?>"
+                                aria-label="Baixar pacote"
+                                <?= $hasDocumentKey ? '' : 'disabled' ?>
+                            >Baixar</button>
+                        </form>
+
+                        <?php if ($documentStatus !== 'SIGNED'): ?>
+                            <form method="post" onsubmit="return confirm('Deseja excluir este documento?');">
+                                <input type="hidden" name="action" value="delete_document">
+                                <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
+                                <button
+                                    class="action-button danger-action"
+                                    type="submit"
+                                    title="Excluir este documento do Portal e marcar como excluido localmente."
+                                >Excluir</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
                 <div class="signer-block">
-                    <strong><?= Response::escape(count($documentSigners) > 1 ? count($documentSigners) . ' assinantes' : ($documentSigners[0]['name'] ?? $document['signer_name'])) ?></strong>
+                    <div class="signer-block-heading">
+                        <strong>Fluxo de assinatura</strong>
+                    </div>
                     <div class="signer-list">
                         <?php foreach ($documentSigners as $signer): ?>
                             <?php $signerCpf = preg_replace('/\D+/', '', (string) ($signer['cpf'] ?? '')) ?: ''; ?>
                             <?php $signerAccessCode = $signerCpf !== '' ? substr(str_pad($signerCpf, 6, '0', STR_PAD_LEFT), -6) : ''; ?>
                             <?php $signerStatus = (string) ($signer['status'] ?? 'PENDING_SIGNATURE'); ?>
-                            <span>
-                                <span class="signer-name-line">
-                                    <?= Response::escape((string) ($signer['name'] ?? 'Assinante')) ?>
-                                    <span
-                                        class="mini-badge <?= Response::escape(status_badge_class($signerStatus)) ?>"
-                                        title="Status tecnico do assinante: <?= Response::escape($signerStatus) ?>"
-                                    ><?= Response::escape(status_label($signerStatus)) ?></span>
-                                </span>
-                                <small><?= Response::escape((string) ($signer['email'] ?? '')) ?></small>
-                            </span>
-                            <?php if ($signerAccessCode !== ''): ?>
-                                <span class="access-code">Acesso: <?= Response::escape($signerAccessCode) ?></span>
-                            <?php endif; ?>
-                            <?php if (!empty($signer['sign_url'])): ?>
-                                <a
-                                    class="signer-link"
-                                    href="<?= Response::escape((string) $signer['sign_url']) ?>"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >Assinar como <?= Response::escape((string) ($signer['name'] ?? 'assinante')) ?></a>
-                            <?php endif; ?>
+                            <div class="signer-row">
+                                <span class="signer-status-dot <?= Response::escape(status_badge_class($signerStatus)) ?>" aria-hidden="true"><?= $signerStatus === 'SIGNED' ? 'OK' : '' ?></span>
+                                <div class="signer-person">
+                                    <span class="signer-name-line">
+                                        <?= Response::escape((string) ($signer['name'] ?? 'Assinante')) ?>
+                                    </span>
+                                    <small><?= Response::escape((string) ($signer['email'] ?? '')) ?></small>
+                                </div>
+
+                                <div class="signer-quick-actions">
+                                    <?php if ($signerAccessCode !== ''): ?>
+                                        <span class="access-code"><small>Codigo acesso</small><?= Response::escape($signerAccessCode) ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($signer['sign_url'])): ?>
+                                        <a
+                                            class="signer-link"
+                                            href="<?= Response::escape((string) $signer['sign_url']) ?>"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >Assinar</a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         <?php endforeach; ?>
                     </div>
                     <?php if ($documentSigners === [] && $accessCode !== ''): ?>
                         <span><?= Response::escape($document['signer_email']) ?></span>
-                        <span class="access-code">Acesso: <?= Response::escape($accessCode) ?></span>
+                        <span class="access-code">Acesso <?= Response::escape($accessCode) ?></span>
                     <?php endif; ?>
                 </div>
 
-                <?php $documentStatus = (string) $document['status']; ?>
-                <div class="status-block">
-                    <span
-                        class="badge <?= Response::escape(status_badge_class($documentStatus)) ?>"
-                        title="Status tecnico: <?= Response::escape($documentStatus) ?>"
-                    >
-                        <?= Response::escape(status_label($documentStatus)) ?>
-                    </span>
-                </div>
-
-                <div class="card-actions">
-                    <form method="post">
-                        <input type="hidden" name="action" value="validate_document">
-                        <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
-                        <button
-                            class="action-button"
-                            type="submit"
-                            title="<?= $hasDocumentKey ? 'Chamar a API para validar as assinaturas deste documento.' : 'A chave do documento e obrigatoria para validar assinaturas.' ?>"
-                            aria-label="Validar assinaturas"
-                            <?= $hasDocumentKey ? '' : 'disabled' ?>
-                        >Validar</button>
-                    </form>
-
-                    <form method="post">
-                        <input type="hidden" name="action" value="download_package">
-                        <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
-                        <button
-                            class="action-button"
-                            type="submit"
-                            title="<?= $hasDocumentKey ? 'Baixar pacote final com documento e comprovantes.' : 'A chave do documento e obrigatoria para baixar o pacote.' ?>"
-                            aria-label="Baixar pacote"
-                            <?= $hasDocumentKey ? '' : 'disabled' ?>
-                        >Baixar</button>
-                    </form>
-
-                    <?php if ($documentStatus !== 'SIGNED'): ?>
-                        <form method="post" onsubmit="return confirm('Deseja excluir este documento?');">
-                            <input type="hidden" name="action" value="delete_document">
-                            <input type="hidden" name="document_id" value="<?= Response::escape($document['id']) ?>">
-                            <button
-                                class="action-button danger-action"
-                                type="submit"
-                                title="Excluir este documento do Portal e marcar como excluido localmente."
-                            >Excluir</button>
-                        </form>
-                    <?php endif; ?>
+                <div class="document-hash-row">
+                    <span>Hash de seguranca:</span>
+                    <strong><?= Response::escape($hasDocumentKey ? substr((string) $document['document_key'], 0, 16) : ('LOCAL-' . $document['id'])) ?></strong>
                 </div>
             </article>
         <?php endforeach; ?>
+
+        <div class="empty-state empty-search-state" data-empty-search hidden>
+            <strong>Nenhum documento encontrado.</strong>
+            <span>Tente buscar por outro titulo, chave, assinante ou e-mail.</span>
+        </div>
     </div>
 </section>
+<script>
+    const documentSearchInput = document.querySelector('[data-document-search]');
+    const documentCards = Array.from(document.querySelectorAll('[data-document-card]'));
+    const emptySearchState = document.querySelector('[data-empty-search]');
+
+    if (documentSearchInput && documentCards.length > 0) {
+        documentSearchInput.addEventListener('input', () => {
+            const query = documentSearchInput.value.trim().toLowerCase();
+            let visibleCount = 0;
+
+            documentCards.forEach((card) => {
+                const matches = query === '' || (card.dataset.search || '').includes(query);
+                card.hidden = !matches;
+
+                if (matches) {
+                    visibleCount += 1;
+                }
+            });
+
+            if (emptySearchState) {
+                emptySearchState.hidden = visibleCount > 0;
+            }
+        });
+    }
+</script>
 <?php
 function document_signers(array $document): array
 {
