@@ -66,6 +66,7 @@ final class ApiClient
             CURLOPT_PROXY => '',
             CURLOPT_NOPROXY => '*',
         ]);
+        $this->applySslOptions($curl);
 
         if ($requestBody !== null) {
             curl_setopt($curl, CURLOPT_POSTFIELDS, $requestBody);
@@ -191,6 +192,52 @@ final class ApiClient
         }
 
         return 'A API retornou erro HTTP ' . $statusCode . '.';
+    }
+
+    private function applySslOptions(\CurlHandle $curl): void
+    {
+        $verifySsl = $this->envFlag('PORTAL_SSL_VERIFY', true);
+
+        if (!$verifySsl) {
+            curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
+
+            return;
+        }
+
+        $caInfo = trim((string) Env::get('PORTAL_SSL_CAINFO', ''));
+
+        if ($caInfo === '') {
+            return;
+        }
+
+        $resolvedCaInfo = $this->resolvePath($caInfo);
+
+        if (!is_file($resolvedCaInfo)) {
+            throw new ApiException('O arquivo configurado em PORTAL_SSL_CAINFO nao foi encontrado: ' . $resolvedCaInfo);
+        }
+
+        curl_setopt($curl, CURLOPT_CAINFO, $resolvedCaInfo);
+    }
+
+    private function envFlag(string $key, bool $default): bool
+    {
+        $value = Env::get($key);
+
+        if ($value === null) {
+            return $default;
+        }
+
+        return in_array(strtolower(trim($value)), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function resolvePath(string $path): string
+    {
+        if (preg_match('/^[A-Za-z]:\\\\/', $path) === 1 || str_starts_with($path, DIRECTORY_SEPARATOR)) {
+            return $path;
+        }
+
+        return BASE_PATH . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
     }
 
     private function looksLikeHtmlResponse(array $decoded): bool

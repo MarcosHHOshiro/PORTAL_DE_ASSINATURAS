@@ -68,6 +68,8 @@ PORTAL_BASE_URL=https://api-sbx.portaldeassinaturas.com.br
 PORTAL_API_TOKEN=seu_token_aqui
 PORTAL_API_CODE=
 PORTAL_API_BASE_PATH=api/v2
+PORTAL_SSL_VERIFY=true
+PORTAL_SSL_CAINFO=
 DATABASE_PATH=storage/database.sqlite
 ```
 
@@ -76,6 +78,8 @@ DATABASE_PATH=storage/database.sqlite
 Na API V2, o Swagger informa autenticacao por cabecalhos `token` e `code`. O `code` pode ficar vazio se o seu ambiente nao exigir esse segundo cabecalho.
 
 No sandbox V2 deste case, o gateway exposto no Swagger usa `https://api-sbx.portaldeassinaturas.com.br/api/v2`.
+
+Se no Windows a chamada HTTPS falhar com `SSL peer certificate or SSH remote key was not OK`, informe um bundle CA confiavel em `PORTAL_SSL_CAINFO`, por exemplo `C:/caminho/cacert.pem`. Como ultimo recurso para desenvolvimento local, use `PORTAL_SSL_VERIFY=false` temporariamente.
 
 Embora o Swagger marque `typeId` como obrigatorio, o comportamento real validado no sandbox V2 deste case foi o oposto: o fluxo de `document/create` funcionou quando o campo foi omitido.
 
