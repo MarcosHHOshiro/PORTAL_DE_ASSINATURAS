@@ -157,7 +157,7 @@ As tabelas criadas na primeira execucao sao:
 
 - `bootstrap.php` centraliza sessao, autoload, carregamento do `.env` e execucao das migracoes.
 - A camada `ApiClient` concentra a comunicacao HTTP e o registro dos logs.
-- A camada `DocumentService` encapsula as regras da integracao com o portal.
+- A camada `DocumentService` orquestra a integracao com o portal e delega validacao de PDF, payloads, assinantes, respostas e pacote assinado para classes auxiliares.
 - O upload usa a conversao exigida no case:
 
 ```php
