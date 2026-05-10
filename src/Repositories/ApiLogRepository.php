@@ -7,6 +7,7 @@ namespace App\Repositories;
 use App\Database\Connection;
 use PDO;
 
+// salva cada chamada feita para a API do Portal
 final class ApiLogRepository
 {
     public function __construct(private readonly ?PDO $pdo = null)

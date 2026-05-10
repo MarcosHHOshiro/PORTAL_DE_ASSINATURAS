@@ -19,6 +19,8 @@ $userRepository = new UserRepository();
 $documentRepository = new DocumentRepository();
 $apiLogRepository = new ApiLogRepository();
 $auth = new AuthService($userRepository);
+
+// Apenas usuarios autenticados podem criar novos fluxos de assinatura.
 AuthMiddleware::requireAuth($auth);
 
 $currentUser = $auth->user();
@@ -31,6 +33,7 @@ if ($currentUser === null || $currentUserId === null) {
 
 $documentService = new DocumentService(new ApiClient($apiLogRepository), $currentUserId);
 $uploadErrors = [];
+//renderiza a tela com pelo menos um assinante
 $formData = [
     'document_name' => '',
     'signers' => [
@@ -43,11 +46,13 @@ $formData = [
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Normaliza os dados recebidos antes de validar e enviar para a API.
     $formData = [
         'document_name' => trim((string) ($_POST['document_name'] ?? '')),
         'signers' => normalize_posted_signers($_POST['signers'] ?? []),
     ];
 
+    // Validacoes locais evitam chamadas desnecessarias para a API externa.
     if (!isset($_FILES['pdf']) || (int) ($_FILES['pdf']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
         $uploadErrors[] = 'Selecione um arquivo PDF valido.';
     }
@@ -75,6 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($uploadErrors === []) {
         $primarySigner = $formData['signers'][0];
 
+        // Cria primeiro o registro local para rastrear o fluxo mesmo se a API falhar.
         $localDocumentId = $documentRepository->create([
             'user_id' => $currentUserId,
             'document_name' => $formData['document_name'],
@@ -89,9 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $uploadedFilePath = (string) $_FILES['pdf']['tmp_name'];
             $uploadedFileName = (string) ($_FILES['pdf']['name'] ?? ($formData['document_name'] . '.pdf'));
 
+            // Envia o PDF para o Portal e salva o uploadId retornado.
             $uploadResponse = $documentService->uploadPdf($uploadedFilePath, $uploadedFileName);
             $documentRepository->updateAfterUpload($localDocumentId, $uploadResponse['uploadId']);
 
+            // Cria o documento/lote de assinatura com os assinantes informados.
             $createBatchResponse = $documentService->createBatchWithSigners(
                 $uploadResponse['uploadId'],
                 $formData['document_name'],
@@ -110,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             Response::flash('success', 'Documento enviado para assinatura com sucesso.');
             Response::redirect('/index.php');
         } catch (Throwable $exception) {
+            // Mantem o documento local marcado como erro para facilitar acompanhamento.
             $documentRepository->updateStatus($localDocumentId, 'ERROR');
             $uploadErrors[] = $exception->getMessage();
         }
@@ -118,6 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 function normalize_posted_signers(mixed $rawSigners): array
 {
+    // Garante uma estrutura minima para a tela sempre ter pelo menos um assinante.
     if (!is_array($rawSigners)) {
         return [['name' => '', 'email' => '', 'cpf' => '']];
     }
@@ -141,6 +151,7 @@ function normalize_posted_signers(mixed $rawSigners): array
 
 function build_signer_summary(array $signers): string
 {
+    // Resumo usado na listagem quando existe mais de um assinante.
     $firstSignerName = (string) ($signers[0]['name'] ?? 'Assinante');
     $remainingSigners = max(count($signers) - 1, 0);
 

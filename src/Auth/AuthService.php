@@ -50,6 +50,7 @@ final class AuthService
             return false;
         }
 
+        //cria a sessão
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $user['id'];
 
@@ -58,7 +59,9 @@ final class AuthService
 
     public function logout(): void
     {
+        //remove o usuário
         unset($_SESSION['user_id']);
+        //regenera o id da sessão para evitar fixação de sessão
         session_regenerate_id(true);
     }
 
