@@ -10,6 +10,7 @@ use App\Http\ApiClient;
 use App\PortalAssinaturas\DocumentService;
 use App\Repositories\ApiLogRepository;
 use App\Repositories\DocumentRepository;
+use App\Repositories\DocumentSignerRepository;
 use App\Repositories\UserRepository;
 use App\Support\Response;
 
@@ -17,6 +18,7 @@ require_once __DIR__ . '/includes/view.php';
 
 $userRepository = new UserRepository();
 $documentRepository = new DocumentRepository();
+$documentSignerRepository = new DocumentSignerRepository();
 $apiLogRepository = new ApiLogRepository();
 $auth = new AuthService($userRepository);
 AuthMiddleware::requireAuth($auth);
@@ -45,7 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
             $validation = $documentService->validateSignatures((string) ($document['document_key'] ?? ''));
-            $documentRepository->updateValidation($documentId, (bool) $validation['isValid'], $validation, document_signers($document));
+            $updatedSigners = $documentSignerRepository->updateStatusesFromValidation($documentId, $validation);
+            $documentRepository->updateValidation($documentId, (bool) $validation['isValid'], $validation, $updatedSigners);
             Response::flash('success', 'Validacao concluida com sucesso.');
         } catch (Throwable $exception) {
             $documentRepository->updateStatus($documentId, 'ERROR');
@@ -105,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $documents = $documentRepository->findAllByUser($currentUserId);
+$signersByDocument = $documentSignerRepository->findByDocuments(array_column($documents, 'id'));
 
 render_page_start('Documentos');
 render_app_header($currentUser, 'documentos');
@@ -156,7 +160,7 @@ render_app_header($currentUser, 'documentos');
             <?php $documentStatus = (string) $document['status']; ?>
             <?php $signerCpfDigits = preg_replace('/\D+/', '', (string) ($document['signer_cpf'] ?? '')) ?: ''; ?>
             <?php $accessCode = $signerCpfDigits !== '' ? substr(str_pad($signerCpfDigits, 6, '0', STR_PAD_LEFT), -6) : ''; ?>
-            <?php $documentSigners = document_signers($document); ?>
+            <?php $documentSigners = $signersByDocument[(int) $document['id']] ?? document_signers($document); ?>
             <?php
                 $searchText = strtolower(trim(implode(' ', array_filter([
                     (string) ($document['document_name'] ?? ''),

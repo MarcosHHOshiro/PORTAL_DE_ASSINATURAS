@@ -151,6 +151,7 @@ As tabelas criadas na primeira execucao sao:
 
 - `users`
 - `documents`
+- `document_signers`
 - `api_logs`
 
 ## Decisoes tecnicas
@@ -158,6 +159,7 @@ As tabelas criadas na primeira execucao sao:
 - `bootstrap.php` centraliza sessao, autoload, carregamento do `.env` e execucao das migracoes.
 - A camada `ApiClient` concentra a comunicacao HTTP e o registro dos logs.
 - A camada `DocumentService` orquestra a integracao com o portal e delega validacao de PDF, payloads, assinantes, respostas e pacote assinado para classes auxiliares.
+- O relacionamento entre documentos e assinantes e normalizado em `document_signers`, com vinculo por `document_id`.
 - O upload usa a conversao exigida no case:
 
 ```php
@@ -190,7 +192,6 @@ Toda chamada para a API externa e registrada na tabela `api_logs` com:
 ## Melhorias futuras
 
 - Webhook para atualizacao automatica de status
-- Suporte a multiplos assinantes
 - Filtros por status e paginacao
 - Persistencia do caminho do arquivo assinado
 - Testes automatizados

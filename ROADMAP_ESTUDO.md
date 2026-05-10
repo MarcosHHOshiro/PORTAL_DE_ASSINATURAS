@@ -35,11 +35,14 @@ Use este arquivo como checklist enquanto estuda o sistema. A ideia e entender pr
 - [ ] Identificar as tabelas criadas pelo sistema
 - [ ] Entender a tabela de usuarios
 - [ ] Entender a tabela de documentos
+- [ ] Entender a tabela de assinantes dos documentos
 - [ ] Entender a tabela de logs da API
 - [ ] Ler `src/Repositories/UserRepository.php`
 - [ ] Ler `src/Repositories/DocumentRepository.php`
+- [ ] Ler `src/Repositories/DocumentSignerRepository.php`
 - [ ] Ler `src/Repositories/ApiLogRepository.php`
 - [ ] Entender o papel do padrao Repository no projeto
+- [ ] Entender o vinculo `documents.id` -> `document_signers.document_id`
 - [ ] Identificar onde sao usados prepared statements
 
 ## 4. Novo envio de documento
@@ -181,7 +184,7 @@ Use este arquivo como checklist enquanto estuda o sistema. A ideia e entender pr
 - [ ] Adicionar CSRF token nos formularios
 - [ ] Validar CPF com algoritmo oficial
 - [ ] Limitar tamanho maximo do upload
-- [ ] Melhorar tratamento de multiplos assinantes
+- [ ] Evoluir consultas e relatorios por assinante
 - [ ] Criar testes automatizados
 - [ ] Separar controllers das views
 - [ ] Adicionar roteador simples
@@ -209,6 +212,7 @@ Use este arquivo como checklist enquanto estuda o sistema. A ideia e entender pr
 - [ ] Usa sessao PHP para login local
 - [ ] Usa SQLite com PDO
 - [ ] Usa repositories para persistencia
+- [ ] Relaciona documentos e assinantes pela tabela `document_signers`
 - [ ] Usa token no header para acessar a API do Portal
 - [ ] Nao usa JWT
 - [ ] Valida PDF antes de enviar

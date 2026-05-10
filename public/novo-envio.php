@@ -10,6 +10,7 @@ use App\Http\ApiClient;
 use App\PortalAssinaturas\DocumentService;
 use App\Repositories\ApiLogRepository;
 use App\Repositories\DocumentRepository;
+use App\Repositories\DocumentSignerRepository;
 use App\Repositories\UserRepository;
 use App\Support\Response;
 
@@ -17,6 +18,7 @@ require_once __DIR__ . '/includes/view.php';
 
 $userRepository = new UserRepository();
 $documentRepository = new DocumentRepository();
+$documentSignerRepository = new DocumentSignerRepository();
 $apiLogRepository = new ApiLogRepository();
 $auth = new AuthService($userRepository);
 
@@ -87,9 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'signer_name' => build_signer_summary($formData['signers']),
             'signer_email' => $primarySigner['email'],
             'signer_cpf' => $primarySigner['cpf'],
-            'signers' => $formData['signers'],
             'status' => 'CREATED',
         ]);
+        $documentSignerRepository->createMany($localDocumentId, $formData['signers']);
 
         try {
             $uploadedFilePath = (string) $_FILES['pdf']['tmp_name'];
@@ -111,9 +113,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'portal_document_id' => $createBatchResponse['portal_document_id'],
                 'document_key' => $createBatchResponse['document_key'],
                 'sign_url' => $createBatchResponse['sign_url'],
-                'signers' => $createBatchResponse['signers'] ?? $formData['signers'],
                 'status' => 'SENT_TO_SIGNATURE',
             ]);
+            $documentSignerRepository->replaceForDocument(
+                $localDocumentId,
+                $createBatchResponse['signers'] ?? $formData['signers']
+            );
 
             Response::flash('success', 'Documento enviado para assinatura com sucesso.');
             Response::redirect('/index.php');
