@@ -243,7 +243,7 @@ render_app_header($currentUser, 'novo-envio');
 
                             <div class="field">
                                 <label for="signer_cpf_<?= Response::escape((string) $index) ?>">Documento (CPF/NIF)</label>
-                                <input id="signer_cpf_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][cpf]" type="text" value="<?= Response::escape($signer['cpf']) ?>" placeholder="000.000.000-00" required>
+                                <input id="signer_cpf_<?= Response::escape((string) $index) ?>" name="signers[<?= Response::escape((string) $index) ?>][cpf]" type="text" value="<?= Response::escape($signer['cpf']) ?>" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" data-cpf-input required>
                             </div>
 
                             <?php if ($index > 0): ?>
@@ -280,7 +280,7 @@ render_app_header($currentUser, 'novo-envio');
 
             <div class="field">
                 <label for="signer_cpf___INDEX__">Documento (CPF/NIF)</label>
-                <input id="signer_cpf___INDEX__" name="signers[__INDEX__][cpf]" type="text" placeholder="000.000.000-00" required>
+                <input id="signer_cpf___INDEX__" name="signers[__INDEX__][cpf]" type="text" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" data-cpf-input required>
             </div>
 
             <div class="field signer-remove-field">
@@ -296,6 +296,39 @@ render_app_header($currentUser, 'novo-envio');
     const signersList = document.querySelector('[data-signers-list]');
     const signerTemplate = document.querySelector('[data-signer-template]');
     const addSignerButton = document.querySelector('[data-add-signer]');
+    const applyCpfMask = (value) => {
+        const digits = value.replace(/\D/g, '').slice(0, 11);
+
+        if (digits.length <= 3) {
+            return digits;
+        }
+
+        if (digits.length <= 6) {
+            return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+        }
+
+        if (digits.length <= 9) {
+            return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+        }
+
+        return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+    };
+
+    const bindCpfMask = (scope = document) => {
+        scope.querySelectorAll('[data-cpf-input]').forEach((input) => {
+            if (input.dataset.maskBound === 'true') {
+                return;
+            }
+
+            input.value = applyCpfMask(input.value);
+            input.addEventListener('input', () => {
+                input.value = applyCpfMask(input.value);
+            });
+            input.dataset.maskBound = 'true';
+        });
+    };
+
+    bindCpfMask();
 
     if (uploadInput && uploadDropzone && uploadFileName) {
         const syncFileName = () => {
@@ -372,6 +405,7 @@ render_app_header($currentUser, 'novo-envio');
                 .replaceAll('__NUMBER__', String(index + 1));
 
             signersList.insertAdjacentHTML('beforeend', html);
+            bindCpfMask(signersList);
             refreshSigners();
         });
 
