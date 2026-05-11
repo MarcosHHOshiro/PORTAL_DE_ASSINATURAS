@@ -6,6 +6,7 @@ namespace App\Support;
 
 final class Response
 {
+    // Redireciona o navegador para outra rota e encerra a execucao atual.
     public static function redirect(string $path): void
     {
         header('Location: ' . $path);
@@ -18,6 +19,7 @@ final class Response
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     }
 
+    // Guarda uma mensagem temporaria na sessao para ser exibida na proxima tela.
     public static function flash(string $type, string $message): void
     {
         $_SESSION['flash'] = [
@@ -26,6 +28,7 @@ final class Response
         ];
     }
 
+    // Recupera a mensagem flash da sessao e a remove para evitar repeticao.
     public static function pullFlash(): ?array
     {
         if (!isset($_SESSION['flash'])) {
@@ -38,6 +41,7 @@ final class Response
         return is_array($flash) ? $flash : null;
     }
 
+    // Envia um arquivo salvo em disco para download pelo navegador do usuario.
     public static function downloadFile(string $absolutePath, ?string $downloadName = null, ?string $mimeType = null): void
     {
         if (!is_file($absolutePath)) {
