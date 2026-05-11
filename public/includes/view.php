@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Support\Response;
 
 if (!function_exists('render_page_start')) {
+    //Abre a estrutura HTML da página, define título, inclui CSS e inicia o layout.
     function render_page_start(string $title): void
     {
         $flash = Response::pullFlash();
@@ -13,6 +14,7 @@ if (!function_exists('render_page_start')) {
         ?>
         <!DOCTYPE html>
         <html lang="pt-BR">
+
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,25 +24,22 @@ if (!function_exists('render_page_start')) {
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
             <link rel="stylesheet" href="/assets/app.css?v=<?= Response::escape($stylesheetVersion) ?>">
         </head>
+
         <body>
-        <div class="app-shell">
-            <div class="ambient ambient-left"></div>
-            <div class="ambient ambient-right"></div>
-            <main class="page page-<?= Response::escape(strtolower(str_replace(' ', '-', $title))) ?>">
-                <?php if ($flash !== null): ?>
-                    <?php $flashType = (string) ($flash['type'] ?? 'info'); ?>
-                    <div
-                        class="alert alert-<?= Response::escape($flashType) ?>"
-                        role="alert"
-                        aria-live="polite"
-                        data-flash-alert
-                    >
-                        <span class="alert-icon" aria-hidden="true"><?= $flashType === 'success' ? 'OK' : '!' ?></span>
-                        <span class="alert-message"><?= Response::escape($flash['message'] ?? '') ?></span>
-                        <button class="alert-close" type="button" aria-label="Fechar alerta" data-alert-close>&times;</button>
-                    </div>
-                <?php endif; ?>
-        <?php
+            <div class="app-shell">
+                <div class="ambient ambient-left"></div>
+                <div class="ambient ambient-right"></div>
+                <main class="page page-<?= Response::escape(strtolower(str_replace(' ', '-', $title))) ?>">
+                    <?php if ($flash !== null): ?>
+                        <?php $flashType = (string) ($flash['type'] ?? 'info'); ?>
+                        <div class="alert alert-<?= Response::escape($flashType) ?>" role="alert" aria-live="polite"
+                            data-flash-alert>
+                            <span class="alert-icon" aria-hidden="true"><?= $flashType === 'success' ? 'OK' : '!' ?></span>
+                            <span class="alert-message"><?= Response::escape($flash['message'] ?? '') ?></span>
+                            <button class="alert-close" type="button" aria-label="Fechar alerta" data-alert-close>&times;</button>
+                        </div>
+                    <?php endif; ?>
+                    <?php
     }
 }
 
@@ -48,16 +47,17 @@ if (!function_exists('render_page_end')) {
     function render_page_end(): void
     {
         ?>
-            </main>
-        </div>
-        <script>
-            document.querySelectorAll('[data-alert-close]').forEach((button) => {
-                button.addEventListener('click', () => {
-                    button.closest('[data-flash-alert]')?.remove();
+                </main>
+            </div>
+            <script>
+                document.querySelectorAll('[data-alert-close]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        button.closest('[data-flash-alert]')?.remove();
+                    });
                 });
-            });
-        </script>
+            </script>
         </body>
+
         </html>
         <?php
     }

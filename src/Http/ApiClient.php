@@ -9,38 +9,54 @@ use App\Repositories\ApiLogRepository;
 
 final class ApiClient
 {
+    private ?\CurlHandle $curl = null;
+
     public function __construct(private readonly ApiLogRepository $apiLogs)
     {
     }
 
+    public function __destruct()
+    {
+        if ($this->curl instanceof \CurlHandle) {
+            curl_close($this->curl);
+            $this->curl = null;
+        }
+    }
+
+    // Faz chamadas GET para endpoints que apenas consultam dados na API.
     public function get(string $endpoint, ?int $userId = null): array
     {
         return $this->request('GET', $endpoint, null, $userId);
     }
 
+    // Faz chamadas POST para endpoints que recebem payload JSON.
     public function post(string $endpoint, array $payload = [], ?int $userId = null): array
     {
         return $this->request('POST', $endpoint, $payload, $userId);
     }
 
+    // Faz chamadas DELETE para remover documentos no portal quando permitido.
     public function delete(string $endpoint, ?int $userId = null): array
     {
         return $this->request('DELETE', $endpoint, null, $userId);
     }
 
+    // Centraliza montagem de URL, headers, execucao do cURL, logs e tratamento de erros.
     private function request(string $method, string $endpoint, ?array $payload, ?int $userId): array
     {
         $baseUrl = rtrim((string) Env::get('PORTAL_BASE_URL', ''), '/');
         $basePath = trim((string) Env::get('PORTAL_API_BASE_PATH', ''), '/');
         $token = (string) Env::get('PORTAL_API_TOKEN', '');
         $code = trim((string) Env::get('PORTAL_API_CODE', ''));
+        $requestTimeout = $this->resolveRequestTimeout();
+        $connectTimeout = $this->resolveConnectTimeout($requestTimeout);
 
         if ($baseUrl === '' || $token === '') {
             throw new ApiException('As variaveis PORTAL_BASE_URL e PORTAL_API_TOKEN precisam estar configuradas no .env.');
         }
 
         $url = $this->buildUrl($baseUrl, $basePath, $endpoint);
-        $curl = curl_init($url);
+        $curl = $this->getCurlHandle($url);
         $requestBody = $payload !== null ? json_encode($payload, JSON_UNESCAPED_UNICODE) : null;
 
         $headers = [
@@ -57,10 +73,12 @@ final class ApiClient
         }
 
         curl_setopt_array($curl, [
+            CURLOPT_URL => $url,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_TIMEOUT => 60,
+            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
+            CURLOPT_TIMEOUT => $requestTimeout,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_HEADER => true,
             CURLOPT_PROXY => '',
@@ -68,15 +86,12 @@ final class ApiClient
         ]);
         $this->applySslOptions($curl);
 
-        if ($requestBody !== null) {
-            curl_setopt($curl, CURLOPT_POSTFIELDS, $requestBody);
-        }
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $requestBody);
 
         $rawResponse = curl_exec($curl);
 
         if ($rawResponse === false) {
             $message = curl_error($curl) ?: 'Falha desconhecida ao chamar a API.';
-            curl_close($curl);
             $this->apiLogs->create($userId, $method, $endpoint, 0, $requestBody, $message);
 
             throw new ApiException($message, 0);
@@ -87,7 +102,6 @@ final class ApiClient
         $responseHeaders = substr($rawResponse, 0, $headerSize);
         $responseBody = substr($rawResponse, $headerSize);
         $contentType = $this->extractHeaderValue($responseHeaders, 'Content-Type');
-        curl_close($curl);
 
         $decoded = $this->decodeResponseBody($responseBody, $contentType, $statusCode);
         $loggedResponseBody = $this->stringifyForLog($decoded);
@@ -103,6 +117,7 @@ final class ApiClient
         return $decoded;
     }
 
+    // Converte a resposta da API em array, inclusive quando o retorno for binario.
     private function decodeResponseBody(string $responseBody, ?string $contentType, int $statusCode): array
     {
         $trimmed = trim($responseBody);
@@ -128,6 +143,7 @@ final class ApiClient
         ];
     }
 
+    // Extrai um header especifico da resposta HTTP bruta retornada pelo cURL.
     private function extractHeaderValue(string $headers, string $headerName): ?string
     {
         foreach (preg_split("/\r\n|\n|\r/", $headers) ?: [] as $line) {
@@ -145,11 +161,13 @@ final class ApiClient
         return null;
     }
 
+    // Padroniza o corpo da resposta em string JSON para persistir nos logs locais.
     private function stringifyForLog(array $decoded): string
     {
         return json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?: '';
     }
 
+    // Monta a URL final combinando base, prefixo da API e endpoint solicitado.
     private function buildUrl(string $baseUrl, string $basePath, string $endpoint): string
     {
         $path = ltrim($endpoint, '/');
@@ -161,6 +179,7 @@ final class ApiClient
         return $baseUrl . '/' . $path;
     }
 
+    // Gera mensagens mais amigaveis para erros comuns de configuracao ou roteamento da API.
     private function buildErrorMessage(int $statusCode, array $decoded, string $baseUrl, string $basePath, string $endpoint): string
     {
         if (isset($decoded['message']) && is_string($decoded['message'])) {
@@ -194,6 +213,7 @@ final class ApiClient
         return 'A API retornou erro HTTP ' . $statusCode . '.';
     }
 
+    // Configura verificacao SSL opcional para suportar ambientes locais e certificados customizados.
     private function applySslOptions(\CurlHandle $curl): void
     {
         $verifySsl = $this->envFlag('PORTAL_SSL_VERIFY', true);
@@ -220,6 +240,21 @@ final class ApiClient
         curl_setopt($curl, CURLOPT_CAINFO, $resolvedCaInfo);
     }
 
+    // Reaproveita o mesmo handle do cURL para reduzir custo de novas conexoes HTTPS.
+    private function getCurlHandle(string $url): \CurlHandle
+    {
+        if ($this->curl instanceof \CurlHandle) {
+            curl_reset($this->curl);
+
+            return $this->curl;
+        }
+
+        $this->curl = curl_init($url);
+
+        return $this->curl;
+    }
+
+    // Interpreta flags booleanas vindas do .env com valores como true, 1, yes e on.
     private function envFlag(string $key, bool $default): bool
     {
         $value = Env::get($key);
@@ -231,6 +266,31 @@ final class ApiClient
         return in_array(strtolower(trim($value)), ['1', 'true', 'yes', 'on'], true);
     }
 
+    // Define o timeout total da requisicao, com valor padrao seguro para o ambiente local.
+    private function resolveRequestTimeout(): int
+    {
+        $configuredTimeout = (int) Env::get('PORTAL_HTTP_TIMEOUT', '25');
+
+        if ($configuredTimeout < 1) {
+            return 25;
+        }
+
+        return $configuredTimeout;
+    }
+
+    // Define o timeout de conexao inicial, sem deixar esse tempo maior que o timeout total.
+    private function resolveConnectTimeout(int $requestTimeout): int
+    {
+        $configuredTimeout = (int) Env::get('PORTAL_HTTP_CONNECT_TIMEOUT', '10');
+
+        if ($configuredTimeout < 1) {
+            $configuredTimeout = 10;
+        }
+
+        return min($configuredTimeout, $requestTimeout);
+    }
+
+    // Resolve caminhos absolutos e relativos usados em configuracoes como CA bundle.
     private function resolvePath(string $path): string
     {
         if (preg_match('/^[A-Za-z]:\\\\/', $path) === 1 || str_starts_with($path, DIRECTORY_SEPARATOR)) {
@@ -240,6 +300,7 @@ final class ApiClient
         return BASE_PATH . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
     }
 
+    // Detecta quando a API devolveu HTML em vez de JSON, sinal comum de URL incorreta.
     private function looksLikeHtmlResponse(array $decoded): bool
     {
         $contentType = strtolower((string) ($decoded['contentType'] ?? ''));

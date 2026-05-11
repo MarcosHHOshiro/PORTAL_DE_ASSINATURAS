@@ -12,6 +12,7 @@ final class Response
         exit;
     }
 
+    // ajuda a evitar XSS
     public static function escape(mixed $value): string
     {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');

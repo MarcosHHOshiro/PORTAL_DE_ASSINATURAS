@@ -109,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $uploadedFileName
             );
 
+            //persistir no banco os dados do documento criado na API
             $documentRepository->updateAfterCreateBatch($localDocumentId, [
                 'portal_document_id' => $createBatchResponse['portal_document_id'],
                 'document_key' => $createBatchResponse['document_key'],

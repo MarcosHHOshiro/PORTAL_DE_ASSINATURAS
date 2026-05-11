@@ -36,6 +36,7 @@ final class DocumentService
         $this->packageWriter = $packageWriter ?? new SignedPackageWriter();
     }
 
+    // função responsável por enviar o arquivo PDF para a API do Portal
     public function uploadPdf(string $filePath, ?string $fileName = null): array
     {
         $this->pdfValidator->assertValid($filePath, $fileName);
@@ -152,6 +153,12 @@ final class DocumentService
 
     private function createDocumentThroughSupportedEndpoint(array $documentPayload): array
     {
+        $electronicSigners = $documentPayload['electronicSigners'] ?? [];
+
+        if (is_array($electronicSigners) && count($electronicSigners) === 1) {
+            return $this->apiClient->post(PortalEndpoints::CREATE, $documentPayload, $this->userId);
+        }
+
         try {
             return $this->apiClient->post(
                 PortalEndpoints::CREATE_BATCH,
